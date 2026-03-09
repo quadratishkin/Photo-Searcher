@@ -120,6 +120,19 @@ You do **not** need to force a specific AI stack unless the task requires it. If
 
 As of March 9, 2026, the repository already contains a **frontend-only UI concept** for the demo.
 
+### Language rules
+
+- The product is being built for a **Russian-speaking audience**.
+- All **user-facing interface text** should default to **Russian** unless the user explicitly asks otherwise.
+- Demo placeholder copy shown in the UI should also be written in **Russian**.
+- Internal technical artifacts may still use English when appropriate:
+  - code identifiers,
+  - dependency names,
+  - commit messages,
+  - framework/tool terminology,
+  - technical comments when they are clearer in English.
+- When there is a conflict, prioritize **Russian for product/UI text** and **clarity for technical implementation details**.
+
 ### Frontend stack currently in use
 
 - **React 19**
