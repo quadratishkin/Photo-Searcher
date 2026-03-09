@@ -130,13 +130,21 @@ button {
 }
 
 .eyebrow {
-  display: inline-block;
-  padding: 0.45rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.7rem 1rem;
   border-radius: 999px;
   margin-bottom: 0.9rem;
   color: rgba(255, 255, 255, 0.76);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+    rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: var(--glass-shadow);
   backdrop-filter: blur(24px) saturate(160%);
 }
 
