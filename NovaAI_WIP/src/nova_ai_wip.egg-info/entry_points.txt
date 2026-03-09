@@ -1,2 +1,0 @@
-[console_scripts]
-nova-ai-wip = nova_ai_wip.main:main
