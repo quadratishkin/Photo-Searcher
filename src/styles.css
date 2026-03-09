@@ -994,9 +994,9 @@ button {
 
   .topbar,
   .topbar-compact {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.85rem;
+    position: relative;
+    display: block;
+    padding-top: 0.1rem;
     padding-bottom: 0.65rem;
   }
 
@@ -1004,6 +1004,7 @@ button {
   .people-hero-copy,
   .search-hero-copy {
     max-width: 100%;
+    padding-top: 4.35rem;
   }
 
   .hero-copy h1 {
@@ -1018,13 +1019,16 @@ button {
   }
 
   .action-row {
-    width: 100%;
+    position: absolute;
+    top: 0;
+    right: 0;
     gap: 0.6rem;
+    width: auto;
     justify-content: flex-end;
   }
 
   .topbar-compact .action-row {
-    width: 100%;
+    width: auto;
   }
 
   .search-stage {
@@ -1052,6 +1056,8 @@ button {
   }
 
   .search-input-shell {
+    display: flex;
+    flex-direction: column;
     padding: 1.05rem 0.95rem 0.9rem;
     border-radius: 1.55rem;
   }
@@ -1062,25 +1068,15 @@ button {
   }
 
   .search-toolbar {
-    display: grid;
-    grid-template-columns: auto auto;
+    order: -1;
+    display: flex;
     gap: 0.7rem;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: 0.85rem;
   }
 
   .search-suggestions-inline {
-    grid-column: 1 / -1;
-    width: 100%;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding-bottom: 0.15rem;
-    scrollbar-width: none;
-  }
-
-  .search-suggestions-inline::-webkit-scrollbar {
     display: none;
   }
 
