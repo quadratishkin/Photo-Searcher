@@ -1,16 +1,36 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-LOCAL_DB_DIR = BASE_DIR / "Local_DB"
-LOCAL_DB_DIR.mkdir(exist_ok=True)
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(name: str, default: list[str]) -> list[str]:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    values = [item.strip() for item in raw_value.split(",")]
+    return [item for item in values if item]
+
+
+LOCAL_DB_DIR = Path(os.environ.get("LIQUID_PHOTOS_DATA_DIR", BASE_DIR / "Local_DB")).resolve()
+LOCAL_DB_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA_ROOT = LOCAL_DB_DIR / "media"
-MEDIA_ROOT.mkdir(exist_ok=True)
-SECRET_KEY = "liquid-photos-demo-secret-key"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "liquid-photos-demo-secret-key")
+DEBUG = env_bool("DJANGO_DEBUG", True)
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", ["*"])
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", [])
 
 INSTALLED_APPS = [
     "django.contrib.admin",

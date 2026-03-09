@@ -1,0 +1,21 @@
+services:
+  liquid-photos:
+    build:
+      context: .
+    container_name: liquid-photos
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-liquid-photos-demo-secret-key}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      LIQUID_PHOTOS_DATA_DIR: /app/Local_DB
+      APP_DEFAULT_USERNAME: ${APP_DEFAULT_USERNAME:-uploader}
+      APP_DEFAULT_PASSWORD: ${APP_DEFAULT_PASSWORD:-change-me-now}
+      APP_DEFAULT_IS_STAFF: ${APP_DEFAULT_IS_STAFF:-false}
+      APP_DEFAULT_IS_SUPERUSER: ${APP_DEFAULT_IS_SUPERUSER:-false}
+      PORT: 8000
+    ports:
+      - "${LIQUID_PHOTOS_PORT:-8000}:8000"
+    restart: unless-stopped
+    volumes:
+      - ${LIQUID_PHOTOS_HOST_DATA_DIR:-./Local_DB}:/app/Local_DB

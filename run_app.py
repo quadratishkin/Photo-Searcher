@@ -27,6 +27,10 @@ def apply_migrations() -> None:
     subprocess.run([sys.executable, "manage.py", "migrate", "--noinput"], cwd=BASE_DIR, check=True)
 
 
+def collect_static() -> None:
+    subprocess.run([sys.executable, "manage.py", "collectstatic", "--noinput"], cwd=BASE_DIR, check=True)
+
+
 def start_server(bind: str) -> None:
     os.execv(
         sys.executable,
@@ -39,6 +43,7 @@ def main() -> None:
     ensure_frontend_dependencies()
     build_frontend()
     apply_migrations()
+    collect_static()
     start_server(bind)
 
 
