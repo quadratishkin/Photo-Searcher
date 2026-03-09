@@ -142,8 +142,8 @@ function SearchView() {
     <section className="search-stage">
       <div className="search-intro">
         <span className="eyebrow search-eyebrow">Поиск</span>
-        <h2>Что вы хотите найти?</h2>
-        <p>Опишите человека, объект, сцену или место на фотографии естественным языком.</p>
+        <h2>Поиск по фото</h2>
+        <p>Опишите человека, объект, сцену или место на фотографии.</p>
       </div>
 
       <div className="search-composer">
