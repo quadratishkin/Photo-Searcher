@@ -14,18 +14,18 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ];
 
 const photos: PhotoItem[] = [
-  { id: 1, src: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80' },
-  { id: 2, src: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=900&q=80' },
-  { id: 3, src: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80' },
-  { id: 4, src: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80' },
-  { id: 5, src: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80' },
-  { id: 6, src: 'https://images.unsplash.com/photo-1511988617509-a57c8a288659?auto=format&fit=crop&w=900&q=80' },
-  { id: 7, src: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80' },
-  { id: 8, src: 'https://images.unsplash.com/photo-1504198453319-5ce911bafcde?auto=format&fit=crop&w=900&q=80' },
-  { id: 9, src: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80' },
-  { id: 10, src: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=900&q=80' },
-  { id: 11, src: 'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?auto=format&fit=crop&w=900&q=80' },
-  { id: 12, src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80' },
+  { id: 1, src: '/demo/media/media-01.jpg' },
+  { id: 2, src: '/demo/media/media-02.jpg' },
+  { id: 3, src: '/demo/media/media-03.jpg' },
+  { id: 4, src: '/demo/media/media-04.jpg' },
+  { id: 5, src: '/demo/media/media-05.jpg' },
+  { id: 6, src: '/demo/media/media-06.jpg' },
+  { id: 7, src: '/demo/media/media-07.jpg' },
+  { id: 8, src: '/demo/media/media-08.jpg' },
+  { id: 9, src: '/demo/media/media-09.jpg' },
+  { id: 10, src: '/demo/media/media-10.jpg' },
+  { id: 11, src: '/demo/media/media-11.jpg' },
+  { id: 12, src: '/demo/media/media-12.jpg' },
 ];
 
 const people = [
@@ -33,37 +33,37 @@ const people = [
     id: 1,
     name: 'Анна',
     count: 28,
-    photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80',
+    photo: '/demo/people/person-01.jpg',
   },
   {
     id: 2,
     name: 'Человек 2',
     count: 14,
-    photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80',
+    photo: '/demo/people/person-02.jpg',
   },
   {
     id: 3,
     name: 'Максим',
     count: 19,
-    photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=80',
+    photo: '/demo/people/person-03.jpg',
   },
   {
     id: 4,
     name: 'Человек 4',
     count: 8,
-    photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80',
+    photo: '/demo/people/person-04.jpg',
   },
   {
     id: 5,
     name: 'Елена',
     count: 11,
-    photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80',
+    photo: '/demo/people/person-05.jpg',
   },
   {
     id: 6,
     name: 'Человек 6',
     count: 6,
-    photo: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=900&q=80',
+    photo: '/demo/people/person-06.jpg',
   },
 ];
 
