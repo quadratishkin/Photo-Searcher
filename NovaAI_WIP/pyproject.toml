@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Experimental AI playground for image search prototypes."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "open_clip_torch",
+]
 
 [project.scripts]
 nova-ai-wip = "nova_ai_wip.main:main"
