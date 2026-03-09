@@ -6,7 +6,7 @@ from django.contrib import admin
 from django.urls import path, re_path
 from django.views.static import serve
 
-from web.views import auth_login, auth_logout, auth_me, auth_register, index, photo_list, photo_upload
+from web.views import auth_login, auth_logout, auth_me, auth_register, index, photo_delete, photo_list, photo_upload
 
 
 urlpatterns = [
@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/auth/logout", auth_logout, name="auth-logout"),
     path("api/photos", photo_list, name="photo-list"),
     path("api/photos/upload", photo_upload, name="photo-upload"),
+    path("api/photos/<int:photo_id>/delete", photo_delete, name="photo-delete"),
 ]
 
 if settings.DEBUG:

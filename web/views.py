@@ -156,3 +156,19 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
         },
         status=201,
     )
+
+
+@require_POST
+def photo_delete(request: HttpRequest, photo_id: int) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    try:
+        photo = Photo.objects.get(id=photo_id, user=request.user)
+    except Photo.DoesNotExist:
+        return JsonResponse({"message": "Фотография не найдена."}, status=404)
+
+    photo.image.delete(save=False)
+    photo.delete()
+    return JsonResponse({"message": "Фотография удалена.", "photoId": photo_id})

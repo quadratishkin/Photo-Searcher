@@ -39,6 +39,11 @@ type PhotoUploadResponse = {
   invalidFiles?: string[];
 };
 
+type PhotoDeleteResponse = {
+  message?: string;
+  photoId?: number;
+};
+
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'library', label: 'Медиа' },
   { id: 'search', label: 'Поиск' },
@@ -83,6 +88,7 @@ function App() {
   const [uploadPending, setUploadPending] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [photoMenu, setPhotoMenu] = useState<{ photoId: number; x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
@@ -116,6 +122,24 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!photoMenu) {
+      return;
+    }
+
+    function closePhotoMenu() {
+      setPhotoMenu(null);
+    }
+
+    window.addEventListener('click', closePhotoMenu);
+    window.addEventListener('scroll', closePhotoMenu, true);
+
+    return () => {
+      window.removeEventListener('click', closePhotoMenu);
+      window.removeEventListener('scroll', closePhotoMenu, true);
+    };
+  }, [photoMenu]);
 
   async function loadCurrentUser() {
     try {
@@ -213,6 +237,7 @@ function App() {
     setAuthMessage('');
     setUserMenuOpen(false);
     setPhotos([]);
+    setPhotoMenu(null);
   }
 
   function showToast(message: string) {
@@ -272,6 +297,30 @@ function App() {
       showToast('Ошибка загрузки фотографий. Проверьте соединение с сервером.');
     } finally {
       setUploadPending(false);
+    }
+  }
+
+  async function handlePhotoDelete(photoId: number) {
+    setPhotoMenu(null);
+
+    try {
+      const response = await fetch(`/api/photos/${photoId}/delete`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+      });
+
+      const data = (await response.json()) as PhotoDeleteResponse;
+      if (!response.ok) {
+        showToast(data.message ?? 'Не удалось удалить фотографию.');
+        return;
+      }
+
+      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      showToast(data.message ?? 'Фотография удалена.');
+    } catch {
+      showToast('Не удалось удалить фотографию. Проверьте соединение с сервером.');
     }
   }
 
@@ -380,10 +429,31 @@ function App() {
       />
 
       <main className={`content ${animateView ? 'content-visible' : ''}`}>
-        {activeTab === 'library' && <LibraryView photos={photos} loading={photosLoading} />}
+        {activeTab === 'library' && (
+          <LibraryView
+            photos={photos}
+            loading={photosLoading}
+            onPhotoContextMenu={(photoId, event) => {
+              event.preventDefault();
+              setPhotoMenu({
+                photoId,
+                x: Math.min(event.clientX, window.innerWidth - 220),
+                y: Math.min(event.clientY, window.innerHeight - 90),
+              });
+            }}
+          />
+        )}
         {activeTab === 'search' && <SearchView searchQuery={searchQuery} setSearchQuery={setSearchQuery} />}
         {activeTab === 'people' && <PeopleView />}
       </main>
+
+      {photoMenu && (
+        <div className="photo-context-menu" style={{ left: photoMenu.x, top: photoMenu.y }}>
+          <button className="photo-context-delete" type="button" onClick={() => void handlePhotoDelete(photoMenu.photoId)}>
+            Удалить фото
+          </button>
+        </div>
+      )}
 
       {toastMessage && (
         <div className="upload-toast" role="status" aria-live="polite">
@@ -509,7 +579,15 @@ function AuthScreen({
   );
 }
 
-function LibraryView({ photos, loading }: { photos: PhotoItem[]; loading: boolean }) {
+function LibraryView({
+  photos,
+  loading,
+  onPhotoContextMenu,
+}: {
+  photos: PhotoItem[];
+  loading: boolean;
+  onPhotoContextMenu: (photoId: number, event: React.MouseEvent<HTMLElement>) => void;
+}) {
   if (loading) {
     return (
       <section className="library-empty-state">
@@ -535,7 +613,7 @@ function LibraryView({ photos, loading }: { photos: PhotoItem[]; loading: boolea
   return (
     <section className="library-grid" aria-label="Photo library">
       {photos.map((photo) => (
-        <article key={photo.id} className="photo-card">
+        <article key={photo.id} className="photo-card" onContextMenu={(event) => onPhotoContextMenu(photo.id, event)}>
           <img src={photo.src} alt={photo.originalFilename} />
           <div className="photo-overlay" />
         </article>
