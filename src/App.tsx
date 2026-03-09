@@ -82,13 +82,16 @@ function App() {
       <div className="ambient ambient-left" />
       <div className="ambient ambient-right" />
 
-      <header className="topbar">
-        <div className="hero-copy">
-          <span className="eyebrow">Liquid Photos</span>
-          <h1>Медиатека</h1>
-          <p>Личная галерея, умный поиск и найденные люди в одном минималистичном интерфейсе.</p>
-        </div>
-
+      <header className={`topbar ${activeTab !== 'library' ? 'topbar-compact' : ''}`}>
+        {activeTab === 'library' ? (
+          <div className="hero-copy">
+            <span className="eyebrow">Liquid Photos</span>
+            <h1>Медиатека</h1>
+            <p>Личная галерея, умный поиск и найденные люди в одном минималистичном интерфейсе.</p>
+          </div>
+        ) : (
+          <div />
+        )}
         <div className="action-row">
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
@@ -136,26 +139,37 @@ function LibraryView() {
 
 function SearchView() {
   return (
-    <section className="panel-view">
-      <div className="glass-panel panel-large">
-        <span className="panel-label">Умный поиск</span>
-        <h2>Найти «девушку в очках рядом с машиной»</h2>
-        <p>
-          Здесь будет поиск по естественным запросам. Пока экран показывает структуру и стиль поисковой строки.
-        </p>
-
-        <div className="search-bar">
-          <SearchIcon />
-          <span>Опишите фото, место, предмет или человека</span>
-        </div>
+    <section className="search-stage">
+      <div className="search-intro">
+        <span className="eyebrow search-eyebrow">Поиск</span>
+        <h2>Что вы хотите найти?</h2>
+        <p>Опишите человека, объект, сцену или место на фотографии естественным языком.</p>
       </div>
 
-      <div className="suggestions">
-        {['закат у моря', 'человек с собакой', 'девушка в очках', 'ночной город'].map((item) => (
-          <div key={item} className="glass-chip">
-            {item}
+      <div className="search-composer">
+        <div className="search-input-shell">
+          <div className="search-input-placeholder">Например: девушка в очках рядом с машиной</div>
+
+          <div className="search-toolbar">
+            <button className="search-tool-button" aria-label="Добавить фильтр">
+              <PlusIcon />
+            </button>
+
+            <div className="search-suggestions-inline">
+              {['закат у моря', 'человек с собакой', 'ночной город'].map((item) => (
+                <div key={item} className="glass-chip compact">
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <button className="search-voice-button" aria-label="Голосовой поиск">
+              <WaveIcon />
+            </button>
           </div>
-        ))}
+        </div>
+
+        <p className="search-footnote">Позже здесь появится настоящий интеллектуальный поиск по вашей личной фотобиблиотеке.</p>
       </div>
     </section>
   );
@@ -199,6 +213,17 @@ function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M11.25 5h1.5v6.25H19v1.5h-6.25V19h-1.5v-6.25H5v-1.5h6.25V5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function WaveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M5.5 9.25a1 1 0 0 1 1 1v3.5a1 1 0 1 1-2 0v-3.5a1 1 0 0 1 1-1Zm4-2.25a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1Zm4 3a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1Zm4-4a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
