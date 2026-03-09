@@ -297,30 +297,21 @@ function AuthScreen({
     <div className="auth-shell">
       <div className="ambient ambient-left" />
       <div className="ambient ambient-right" />
+      <div className="auth-brand-row">
+        <span className="eyebrow">Liquid Photos</span>
+      </div>
 
       <section className="auth-layout">
-        <div className="auth-copy">
-          <span className="eyebrow">Liquid Photos</span>
-          <h1>{isRegister ? 'Создайте аккаунт' : 'Войдите в медиатеку'}</h1>
-          <p>
-            {isRegister
-              ? 'Один аккаунт хранит вашу личную библиотеку, поиск по фото и найденных людей.'
-              : 'Авторизуйтесь, чтобы открыть личную фотобиблиотеку, поиск и вкладку с найденными людьми.'}
-          </p>
-
-          <div className="auth-points">
-            <div className="auth-point">
-              <strong>Сессия сохраняется</strong>
-              <span>После входа приложение помнит пользователя и не просит логиниться при каждом запуске.</span>
-            </div>
-            <div className="auth-point">
-              <strong>Demo-ready вход</strong>
-              <span>Пока используется простая авторизация по имени пользователя и паролю без лишней сложности.</span>
-            </div>
-          </div>
-        </div>
-
         <div className="auth-card">
+          <div className="auth-title-block">
+            <h1>{isRegister ? 'Создайте аккаунт' : 'Войдите в медиатеку'}</h1>
+            <p>
+              {isRegister
+                ? 'Один аккаунт хранит вашу личную библиотеку, поиск по фото и найденных людей.'
+                : 'Авторизуйтесь, чтобы открыть личную фотобиблиотеку, поиск и вкладку с найденными людьми.'}
+            </p>
+          </div>
+
           <div className="auth-card-header">
             <button className={`auth-mode-button ${mode === 'login' ? 'active' : ''}`} onClick={() => onModeChange('login')}>
               Вход

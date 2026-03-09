@@ -124,11 +124,9 @@ button {
 .auth-layout {
   position: relative;
   z-index: 1;
-  min-height: calc(100vh - clamp(40px, 6vw, 72px));
+  min-height: calc(100vh - 7rem);
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 460px);
-  gap: clamp(1.4rem, 4vw, 4rem);
-  align-items: center;
+  place-items: center;
 }
 
 .eyebrow {
@@ -142,59 +140,38 @@ button {
   backdrop-filter: blur(24px) saturate(160%);
 }
 
-.auth-copy {
-  max-width: 36rem;
+.auth-brand-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  padding-top: 0.2rem;
 }
 
-.auth-copy h1 {
+.auth-title-block {
+  text-align: center;
+  margin-bottom: 1.35rem;
+}
+
+.auth-title-block h1 {
   margin: 0;
-  font-size: clamp(3rem, 8vw, 6.4rem);
-  line-height: 0.92;
-  letter-spacing: -0.07em;
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
+  line-height: 0.94;
+  letter-spacing: -0.06em;
 }
 
-.auth-copy p {
-  margin: 1rem 0 0;
-  max-width: 30rem;
-  font-size: clamp(1rem, 1.9vw, 1.12rem);
-  line-height: 1.6;
+.auth-title-block p {
+  margin: 0.95rem auto 0;
+  max-width: 34rem;
+  font-size: clamp(0.98rem, 1.8vw, 1.08rem);
+  line-height: 1.55;
   color: rgba(240, 244, 255, 0.75);
 }
 
-.auth-points {
-  display: grid;
-  gap: 0.95rem;
-  margin-top: 2rem;
-}
-
-.auth-point {
-  padding: 1rem 1.1rem;
-  border-radius: 1.45rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
-    rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: var(--glass-shadow);
-}
-
-.auth-point strong,
-.auth-point span {
-  display: block;
-}
-
-.auth-point strong {
-  font-size: 0.98rem;
-}
-
-.auth-point span {
-  margin-top: 0.35rem;
-  color: rgba(240, 244, 255, 0.72);
-  line-height: 1.45;
-}
-
 .auth-card {
-  padding: 1.25rem;
-  border-radius: 2rem;
+  width: min(40rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border-radius: 2.2rem;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
     rgba(255, 255, 255, 0.12);
@@ -210,10 +187,11 @@ button {
   padding: 0.35rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+  margin: 0 auto;
 }
 
 .auth-mode-button {
-  min-height: 3rem;
+  min-height: 3.35rem;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.7);
   background: transparent;
@@ -233,7 +211,7 @@ button {
 .auth-form {
   display: grid;
   gap: 1rem;
-  margin-top: 1rem;
+  margin-top: 1.15rem;
 }
 
 .auth-field {
@@ -247,7 +225,7 @@ button {
 }
 
 .auth-field input {
-  min-height: 3.65rem;
+  min-height: 3.85rem;
   padding: 0 1rem;
   border-radius: 1.15rem;
   color: #fff;
@@ -280,7 +258,7 @@ button {
 }
 
 .auth-submit-button {
-  min-height: 3.85rem;
+  min-height: 4rem;
   border-radius: 1.25rem;
   color: #08111d;
   background:
@@ -739,9 +717,7 @@ button {
 
 @media (max-width: 900px) {
   .auth-layout {
-    grid-template-columns: 1fr;
-    align-items: start;
-    padding-top: 1.5rem;
+    min-height: calc(100vh - 6rem);
   }
 
   .topbar {
@@ -767,13 +743,14 @@ button {
     padding: 1rem 0.85rem 1.2rem;
   }
 
-  .auth-copy h1 {
-    font-size: clamp(2.7rem, 16vw, 4.2rem);
+  .auth-title-block h1 {
+    font-size: clamp(2.5rem, 13vw, 3.6rem);
   }
 
   .auth-card {
+    width: min(100%, 32rem);
     padding: 1rem;
-    border-radius: 1.6rem;
+    border-radius: 1.75rem;
   }
 
   .app-shell {
