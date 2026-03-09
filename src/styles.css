@@ -343,10 +343,10 @@ button {
   left: 50%;
   bottom: clamp(18px, 4vw, 30px);
   transform: translateX(-50%);
-  width: min(32rem, calc(100vw - 1.6rem));
+  width: min(26rem, calc(100vw - 2rem));
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  padding: 0.45rem;
+  padding: 0.36rem;
   border-radius: 999px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
@@ -360,9 +360,9 @@ button {
 
 .tab-highlight {
   position: absolute;
-  top: 0.42rem;
-  bottom: 0.42rem;
-  width: calc((100% - 0.9rem) / 3);
+  top: 0.34rem;
+  bottom: 0.34rem;
+  width: calc((100% - 0.72rem) / 3);
   border-radius: 999px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.16)),
@@ -379,21 +379,21 @@ button {
 }
 
 .tab-highlight.search {
-  transform: translateX(calc(100% + 0.225rem));
+  transform: translateX(calc(100% + 0.18rem));
 }
 
 .tab-highlight.people {
-  transform: translateX(calc(200% + 0.45rem));
+  transform: translateX(calc(200% + 0.36rem));
 }
 
 .tab-button {
   position: relative;
   z-index: 1;
-  min-height: 3.8rem;
+  min-height: 3.1rem;
   color: rgba(255, 255, 255, 0.68);
   background: transparent;
   cursor: pointer;
-  font-size: 1.08rem;
+  font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
@@ -447,12 +447,12 @@ button {
   }
 
   .tabbar {
-    width: calc(100vw - 1rem);
+    width: calc(100vw - 1.2rem);
   }
 
   .tab-button {
-    min-height: 3.45rem;
-    font-size: 1rem;
+    min-height: 2.9rem;
+    font-size: 0.92rem;
   }
 
   .glass-person-card {

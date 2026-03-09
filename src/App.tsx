@@ -9,9 +9,9 @@ type PhotoItem = {
 };
 
 const tabs: Array<{ id: TabId; label: string }> = [
-  { id: 'library', label: 'Library' },
-  { id: 'search', label: 'Search' },
-  { id: 'people', label: 'People' },
+  { id: 'library', label: 'Медиа' },
+  { id: 'search', label: 'Поиск' },
+  { id: 'people', label: 'Люди' },
 ];
 
 const photos: PhotoItem[] = [
@@ -53,15 +53,15 @@ function App() {
       <header className="topbar">
         <div className="hero-copy">
           <span className="eyebrow">Liquid Photos</span>
-          <h1>March highlights</h1>
-          <p>Your library, semantic search, and people index in one minimal surface.</p>
+          <h1>Медиатека</h1>
+          <p>Личная галерея, умный поиск и найденные люди в одном минималистичном интерфейсе.</p>
         </div>
 
         <div className="action-row">
-          <button className="glass-icon-button" aria-label="Go to search" onClick={() => setActiveTab('search')}>
+          <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
           </button>
-          <button className="glass-icon-button primary" aria-label="Upload photos">
+          <button className="glass-icon-button primary" aria-label="Добавить фотографии">
             <PlusIcon />
           </button>
         </div>
@@ -106,20 +106,20 @@ function SearchView() {
   return (
     <section className="panel-view">
       <div className="glass-panel panel-large">
-        <span className="panel-label">Smart Search</span>
-        <h2>Find “girl with glasses near a car”</h2>
+        <span className="panel-label">Умный поиск</span>
+        <h2>Найти «девушку в очках рядом с машиной»</h2>
         <p>
-          Natural-language search will live here. For now this screen shows the layout and glass input style.
+          Здесь будет поиск по естественным запросам. Пока экран показывает структуру и стиль поисковой строки.
         </p>
 
         <div className="search-bar">
           <SearchIcon />
-          <span>Describe a photo, place, object, or person</span>
+          <span>Опишите фото, место, предмет или человека</span>
         </div>
       </div>
 
       <div className="suggestions">
-        {['sunset at the sea', 'person with a dog', 'girl with glasses', 'night city lights'].map((item) => (
+        {['закат у моря', 'человек с собакой', 'девушка в очках', 'ночной город'].map((item) => (
           <div key={item} className="glass-chip">
             {item}
           </div>
@@ -133,9 +133,9 @@ function PeopleView() {
   return (
     <section className="panel-view">
       <div className="glass-panel panel-large">
-        <span className="panel-label">People</span>
-        <h2>Detected faces and named groups</h2>
-        <p>This tab will later show clustered people and let the user assign readable names.</p>
+        <span className="panel-label">Люди</span>
+        <h2>Найденные лица и группы</h2>
+        <p>Позже здесь появятся сгруппированные люди и возможность присваивать им понятные имена.</p>
       </div>
 
       <div className="people-list">
@@ -146,7 +146,7 @@ function PeopleView() {
               <h3>{person.name}</h3>
               <p>{person.hint}</p>
             </div>
-            <span>{person.count} photos</span>
+            <span>{person.count} фото</span>
           </article>
         ))}
       </div>
