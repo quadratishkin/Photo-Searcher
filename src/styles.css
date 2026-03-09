@@ -1135,9 +1135,9 @@ button {
   }
 
   .tabbar {
-    width: calc(100vw - 1.6rem);
+    width: calc(100vw - 2.1rem);
     bottom: 0.55rem;
-    border-radius: 1.2rem;
+    border-radius: 999px;
     padding: 0.36rem;
   }
 
@@ -1208,7 +1208,7 @@ button {
   }
 
   .tabbar {
-    width: calc(100vw - 1.1rem);
+    width: calc(100vw - 1.5rem);
     bottom: 0.35rem;
   }
 
