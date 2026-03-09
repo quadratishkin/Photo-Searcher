@@ -10,6 +10,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
+from photo_ai import get_ai_module_status
 from web.models import Photo
 
 
@@ -47,6 +48,11 @@ def serialize_photo(photo: Photo) -> dict:
 @ensure_csrf_cookie
 def index(request: HttpRequest):
     return render(request, "index.html")
+
+
+@require_GET
+def ai_status(request: HttpRequest) -> JsonResponse:
+    return JsonResponse(get_ai_module_status())
 
 
 @require_GET

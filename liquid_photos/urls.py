@@ -6,12 +6,13 @@ from django.contrib import admin
 from django.urls import path, re_path
 from django.views.static import serve
 
-from web.views import auth_login, auth_logout, auth_me, auth_register, index, photo_delete, photo_list, photo_upload
+from web.views import ai_status, auth_login, auth_logout, auth_me, auth_register, index, photo_delete, photo_list, photo_upload
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", index, name="index"),
+    path("api/ai/status", ai_status, name="ai-status"),
     path("api/auth/me", auth_me, name="auth-me"),
     path("api/auth/login", auth_login, name="auth-login"),
     path("api/auth/register", auth_register, name="auth-register"),

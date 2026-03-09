@@ -44,6 +44,14 @@ type PhotoDeleteResponse = {
   photoId?: number;
 };
 
+type AiStatusResponse = {
+  enabled: boolean;
+  state: string;
+  summary: string;
+  details: string;
+  reason: string;
+};
+
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'library', label: 'Медиа' },
   { id: 'search', label: 'Поиск' },
@@ -63,11 +71,6 @@ const DEFAULT_AUTH_FIELDS = {
   username: '',
   password: '',
   passwordConfirm: '',
-};
-
-const AI_MODULE_INFO = {
-  name: 'Модуль подключен',
-  details: 'XPC / CUDA / RTX 5070 Ti',
 };
 
 const ALLOWED_UPLOAD_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'];
@@ -102,12 +105,20 @@ function App() {
   const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [photoMenu, setPhotoMenu] = useState<{ photoId: number; x: number; y: number } | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiStatusResponse>({
+    enabled: false,
+    state: 'loading',
+    summary: 'Проверяем модуль',
+    details: 'Запрашиваем текущее состояние AI-модуля',
+    reason: '',
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const photoMenuRef = useRef<HTMLDivElement | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     void loadCurrentUser();
+    void loadAiStatus();
   }, []);
 
   useEffect(() => {
@@ -171,6 +182,33 @@ function App() {
       setUser(data.user ?? null);
     } finally {
       setAuthChecked(true);
+    }
+  }
+
+  async function loadAiStatus() {
+    try {
+      const response = await fetch('/api/ai/status');
+      const data = await readJsonSafely<AiStatusResponse>(response);
+      if (!response.ok || !data) {
+        setAiStatus({
+          enabled: false,
+          state: 'error',
+          summary: 'Статус недоступен',
+          details: 'Не удалось получить состояние AI-модуля',
+          reason: 'API статуса вернул ошибку.',
+        });
+        return;
+      }
+
+      setAiStatus(data);
+    } catch {
+      setAiStatus({
+        enabled: false,
+        state: 'error',
+        summary: 'Статус недоступен',
+        details: 'Нет ответа от AI status API',
+        reason: 'Не удалось выполнить запрос состояния AI-модуля.',
+      });
     }
   }
 
@@ -398,8 +436,8 @@ function App() {
         )}
         <div className="action-row">
           <div className="status-badge ai-badge">
-            <span className="status-badge-label">{AI_MODULE_INFO.name}</span>
-            <strong>{AI_MODULE_INFO.details}</strong>
+            <span className="status-badge-label">{aiStatus.summary}</span>
+            <strong>{aiStatus.details}</strong>
           </div>
           <div className="user-menu">
             <button
