@@ -72,6 +72,19 @@ const AI_MODULE_INFO = {
 
 const ALLOWED_UPLOAD_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'];
 
+async function readJsonSafely<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -90,6 +103,7 @@ function App() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [photoMenu, setPhotoMenu] = useState<{ photoId: number; x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const photoMenuRef = useRef<HTMLDivElement | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -128,15 +142,19 @@ function App() {
       return;
     }
 
-    function closePhotoMenu() {
+    function closePhotoMenu(event: Event) {
+      if (event.target instanceof Node && photoMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
       setPhotoMenu(null);
     }
 
-    window.addEventListener('click', closePhotoMenu);
+    window.addEventListener('mousedown', closePhotoMenu);
     window.addEventListener('scroll', closePhotoMenu, true);
 
     return () => {
-      window.removeEventListener('click', closePhotoMenu);
+      window.removeEventListener('mousedown', closePhotoMenu);
       window.removeEventListener('scroll', closePhotoMenu, true);
     };
   }, [photoMenu]);
@@ -204,14 +222,14 @@ function App() {
         body: JSON.stringify(authFields),
       });
 
-      const data = (await response.json()) as AuthResponse;
+      const data = await readJsonSafely<AuthResponse>(response);
       if (!response.ok) {
-        setAuthMessage(data.message ?? 'Не удалось выполнить авторизацию.');
-        setAuthErrors(data.fieldErrors ?? {});
+        setAuthMessage(data?.message ?? 'Не удалось выполнить авторизацию.');
+        setAuthErrors(data?.fieldErrors ?? {});
         return;
       }
 
-      setUser(data.user ?? null);
+      setUser(data?.user ?? null);
       setAuthFields(DEFAULT_AUTH_FIELDS);
       setAuthMessage('');
       setAuthErrors({});
@@ -284,14 +302,14 @@ function App() {
         body: formData,
       });
 
-      const data = (await response.json()) as PhotoUploadResponse;
+      const data = await readJsonSafely<PhotoUploadResponse>(response);
       if (!response.ok) {
-        showToast(data.message ?? 'Не удалось загрузить фотографии.');
+        showToast(data?.message ?? 'Не удалось загрузить фотографии.');
         return;
       }
 
       await loadPhotos();
-      showToast(data.message ?? `Загружено ${files.length} фото.`);
+      showToast(data?.message ?? `Загружено ${files.length} фото.`);
       setActiveTab('library');
     } catch {
       showToast('Ошибка загрузки фотографий. Проверьте соединение с сервером.');
@@ -311,14 +329,14 @@ function App() {
         },
       });
 
-      const data = (await response.json()) as PhotoDeleteResponse;
+      const data = await readJsonSafely<PhotoDeleteResponse>(response);
       if (!response.ok) {
-        showToast(data.message ?? 'Не удалось удалить фотографию.');
+        showToast(data?.message ?? 'Не удалось удалить фотографию.');
         return;
       }
 
       setPhotos((current) => current.filter((photo) => photo.id !== photoId));
-      showToast(data.message ?? 'Фотография удалена.');
+      showToast(data?.message ?? 'Фотография удалена.');
     } catch {
       showToast('Не удалось удалить фотографию. Проверьте соединение с сервером.');
     }
@@ -448,7 +466,7 @@ function App() {
       </main>
 
       {photoMenu && (
-        <div className="photo-context-menu" style={{ left: photoMenu.x, top: photoMenu.y }}>
+        <div ref={photoMenuRef} className="photo-context-menu" style={{ left: photoMenu.x, top: photoMenu.y }}>
           <button className="photo-context-delete" type="button" onClick={() => void handlePhotoDelete(photoMenu.photoId)}>
             Удалить фото
           </button>
