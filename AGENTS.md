@@ -339,6 +339,22 @@ Expected verification methods:
 
 The agent must not treat static code inspection alone as sufficient verification for web request handling when live local verification is possible.
 
+### Required server restart after backend changes
+
+If a task changes Django backend code, routes, settings, startup behavior, templates served by Django, or any API behavior, the agent must explicitly check whether a local dev server is already running.
+
+If an older server process is running, the agent must:
+- stop the old process,
+- restart the server from the current workspace state,
+- verify that the restarted process is the one actually serving requests.
+
+Refreshing the browser tab alone is not sufficient after backend changes when the active server may still be running old code, especially if it was started with `--noreload`.
+
+Before finishing the task, the agent must ensure that:
+- the old server process is no longer active,
+- the current server process is serving the new code,
+- live HTTP verification is performed against that restarted server.
+
 In your final task report, clearly distinguish:
 - what you changed,
 - what you verified,
