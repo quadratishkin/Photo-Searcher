@@ -147,7 +147,7 @@ function SearchView() {
   return (
     <section className="search-stage">
       <div className="search-intro">
-        <span className="eyebrow search-eyebrow">Поиск</span>
+        <span className="eyebrow search-eyebrow">Liquid Photos</span>
         <h2>Поиск по фото</h2>
         <p>Опишите человека, объект, сцену или место на фотографии.</p>
       </div>
@@ -175,7 +175,6 @@ function SearchView() {
           </div>
         </div>
 
-        <p className="search-footnote">Позже здесь появится настоящий интеллектуальный поиск по вашей личной фотобиблиотеке.</p>
       </div>
     </section>
   );
