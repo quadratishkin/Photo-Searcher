@@ -89,6 +89,10 @@ function App() {
             <h1>Медиатека</h1>
             <p>Личная галерея, умный поиск и найденные люди в одном минималистичном интерфейсе.</p>
           </div>
+        ) : activeTab === 'search' ? (
+          <div className="hero-copy search-hero-copy">
+            <span className="eyebrow">Liquid Photos</span>
+          </div>
         ) : activeTab === 'people' ? (
           <div className="hero-copy people-hero-copy">
             <span className="eyebrow people-eyebrow">Liquid Photos</span>
@@ -147,7 +151,6 @@ function SearchView() {
   return (
     <section className="search-stage">
       <div className="search-intro">
-        <span className="eyebrow search-eyebrow">Liquid Photos</span>
         <h2>Поиск по фото</h2>
         <p>Опишите человека, объект, сцену или место на фотографии.</p>
       </div>
