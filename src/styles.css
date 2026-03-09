@@ -419,25 +419,29 @@ button {
 }
 
 .people-header {
-  text-align: center;
-  justify-self: center;
-  max-width: 38rem;
-  padding: 0.5rem 0 0.35rem;
+  text-align: left;
+  justify-self: start;
+  max-width: 34rem;
+  padding: 0.15rem 0 0.4rem;
+}
+
+.people-eyebrow {
+  margin-bottom: 0.95rem;
 }
 
 .people-header h2 {
   margin: 0;
-  font-size: clamp(2.1rem, 5vw, 3.8rem);
-  line-height: 0.98;
+  font-size: clamp(2.9rem, 8vw, 5.6rem);
+  line-height: 0.92;
   letter-spacing: -0.06em;
   font-weight: 800;
 }
 
 .people-header p {
-  margin: 0.85rem auto 0;
-  max-width: 31rem;
+  margin: 0.85rem 0 0;
+  max-width: 28rem;
   color: rgba(241, 245, 255, 0.72);
-  font-size: clamp(0.98rem, 1.8vw, 1.08rem);
+  font-size: clamp(0.95rem, 2vw, 1.08rem);
   line-height: 1.5;
 }
 

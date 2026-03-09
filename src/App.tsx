@@ -179,6 +179,7 @@ function PeopleView() {
   return (
     <section className="panel-view">
       <div className="people-header">
+        <span className="eyebrow people-eyebrow">Liquid Photos</span>
         <h2>Люди</h2>
         <p>Лица, которые система нашла и сгруппировала по фотографиям в вашей медиатеке.</p>
       </div>
