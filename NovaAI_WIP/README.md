@@ -30,6 +30,18 @@ pip install -e .
 nova-ai-wip
 ```
 
+## GPU-режим
+
+Для NVIDIA GPU здесь проверен запуск OpenCLIP через CUDA-сборки PyTorch.
+
+Команда установки:
+
+```bash
+python -m pip install --force-reinstall torch==2.10.0+cu128 torchvision==0.25.0+cu128 --index-url https://download.pytorch.org/whl/cu128
+```
+
+После этого `python -m nova_ai_wip` автоматически выбирает `cuda`, если видеокарта доступна.
+
 ## Следующие шаги
 
 - прогнать OpenCLIP на локальном наборе тестовых изображений;
