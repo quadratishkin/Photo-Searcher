@@ -320,6 +320,14 @@ Examples:
 - app startup sanity checks
 - targeted manual flow verification for the changed feature
 
+### Required verification for Python changes
+
+If a task changes Python code in this repository, the agent must run:
+
+- `python manage.py check`
+
+before finishing the task, and confirm that the command reports no errors.
+
 ### Required verification for web/API changes
 
 If a task adds or changes web functionality, HTTP routes, form submission, authentication, uploads, or any API behavior, the agent must verify the behavior with real HTTP requests against the locally running application.
