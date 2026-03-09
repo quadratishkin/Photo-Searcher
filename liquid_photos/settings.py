@@ -6,6 +6,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOCAL_DB_DIR = BASE_DIR / "Local_DB"
 LOCAL_DB_DIR.mkdir(exist_ok=True)
+MEDIA_ROOT = LOCAL_DB_DIR / "media"
+MEDIA_ROOT.mkdir(exist_ok=True)
 SECRET_KEY = "liquid-photos-demo-secret-key"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -65,6 +67,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "frontend_build"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False

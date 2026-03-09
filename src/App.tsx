@@ -6,6 +6,8 @@ type AuthMode = 'login' | 'register';
 type PhotoItem = {
   id: number;
   src: string;
+  originalFilename: string;
+  processingStatus: string;
 };
 
 type AuthUser = {
@@ -20,25 +22,27 @@ type AuthResponse = {
   fieldErrors?: Record<string, string>;
 };
 
+type PhotoApiItem = {
+  id: number;
+  url: string;
+  originalFilename: string;
+  processingStatus: string;
+};
+
+type PhotoListResponse = {
+  photos: PhotoApiItem[];
+};
+
+type PhotoUploadResponse = {
+  message?: string;
+  photos?: PhotoApiItem[];
+  invalidFiles?: string[];
+};
+
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'library', label: 'Медиа' },
   { id: 'search', label: 'Поиск' },
   { id: 'people', label: 'Люди' },
-];
-
-const photos: PhotoItem[] = [
-  { id: 1, src: '/demo/media/media-01.jpg' },
-  { id: 2, src: '/demo/media/media-02.jpg' },
-  { id: 3, src: '/demo/media/media-03.jpg' },
-  { id: 4, src: '/demo/media/media-04.jpg' },
-  { id: 5, src: '/demo/media/media-05.jpg' },
-  { id: 6, src: '/demo/media/media-06.jpg' },
-  { id: 7, src: '/demo/media/media-07.jpg' },
-  { id: 8, src: '/demo/media/media-08.jpg' },
-  { id: 9, src: '/demo/media/media-09.jpg' },
-  { id: 10, src: '/demo/media/media-10.jpg' },
-  { id: 11, src: '/demo/media/media-11.jpg' },
-  { id: 12, src: '/demo/media/media-12.jpg' },
 ];
 
 const people = [
@@ -61,6 +65,8 @@ const AI_MODULE_INFO = {
   details: 'XPC / CUDA / RTX 5070 Ti',
 };
 
+const ALLOWED_UPLOAD_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'];
+
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -72,13 +78,26 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>('library');
   const [animateView, setAnimateView] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [uploadPending, setUploadPending] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     void loadCurrentUser();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setPhotos([]);
+      return;
+    }
+
+    void loadPhotos();
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -89,6 +108,14 @@ function App() {
     const frame = requestAnimationFrame(() => setAnimateView(true));
     return () => cancelAnimationFrame(frame);
   }, [activeTab, user]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   async function loadCurrentUser() {
     try {
@@ -102,6 +129,31 @@ function App() {
       setUser(data.user ?? null);
     } finally {
       setAuthChecked(true);
+    }
+  }
+
+  function mapPhoto(item: PhotoApiItem): PhotoItem {
+    return {
+      id: item.id,
+      src: item.url,
+      originalFilename: item.originalFilename,
+      processingStatus: item.processingStatus,
+    };
+  }
+
+  async function loadPhotos() {
+    setPhotosLoading(true);
+    try {
+      const response = await fetch('/api/photos');
+      if (!response.ok) {
+        setPhotos([]);
+        return;
+      }
+
+      const data = (await response.json()) as PhotoListResponse;
+      setPhotos((data.photos ?? []).map(mapPhoto));
+    } finally {
+      setPhotosLoading(false);
     }
   }
 
@@ -160,15 +212,67 @@ function App() {
     setAuthErrors({});
     setAuthMessage('');
     setUserMenuOpen(false);
+    setPhotos([]);
+  }
+
+  function showToast(message: string) {
+    setToastMessage(message);
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => setToastMessage(''), 3200);
   }
 
   function openPhotoPicker() {
     fileInputRef.current?.click();
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    setSelectedFiles(files.map((file) => file.name));
+    event.target.value = '';
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const invalidFile = files.find((file) => {
+      const extension = `.${file.name.split('.').pop()?.toLowerCase() ?? ''}`;
+      return !ALLOWED_UPLOAD_EXTENSIONS.includes(extension);
+    });
+    if (invalidFile) {
+      showToast(`Файл ${invalidFile.name} не является поддерживаемой фотографией.`);
+      return;
+    }
+
+    setUploadPending(true);
+    showToast(`Загружаем ${files.length} фото...`);
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
+
+      const response = await fetch('/api/photos/upload', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: formData,
+      });
+
+      const data = (await response.json()) as PhotoUploadResponse;
+      if (!response.ok) {
+        showToast(data.message ?? 'Не удалось загрузить фотографии.');
+        return;
+      }
+
+      await loadPhotos();
+      showToast(data.message ?? `Загружено ${files.length} фото.`);
+      setActiveTab('library');
+    } catch {
+      showToast('Ошибка загрузки фотографий. Проверьте соединение с сервером.');
+    } finally {
+      setUploadPending(false);
+    }
   }
 
   if (!authChecked) {
@@ -255,7 +359,12 @@ function App() {
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
           </button>
-          <button className="glass-icon-button primary" aria-label="Добавить фотографии" onClick={openPhotoPicker}>
+          <button
+            className="glass-icon-button primary"
+            aria-label="Добавить фотографии"
+            onClick={openPhotoPicker}
+            disabled={uploadPending}
+          >
             <PlusIcon />
           </button>
         </div>
@@ -271,14 +380,14 @@ function App() {
       />
 
       <main className={`content ${animateView ? 'content-visible' : ''}`}>
-        {activeTab === 'library' && <LibraryView />}
+        {activeTab === 'library' && <LibraryView photos={photos} loading={photosLoading} />}
         {activeTab === 'search' && <SearchView searchQuery={searchQuery} setSearchQuery={setSearchQuery} />}
         {activeTab === 'people' && <PeopleView />}
       </main>
 
-      {selectedFiles.length > 0 && (
+      {toastMessage && (
         <div className="upload-toast" role="status" aria-live="polite">
-          Выбрано {selectedFiles.length} фото
+          {toastMessage}
         </div>
       )}
 
@@ -400,12 +509,34 @@ function AuthScreen({
   );
 }
 
-function LibraryView() {
+function LibraryView({ photos, loading }: { photos: PhotoItem[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <section className="library-empty-state">
+        <div className="library-empty-card">
+          <h2>Загружаем медиатеку...</h2>
+          <p>Список фотографий пользователя обновляется с сервера.</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (photos.length === 0) {
+    return (
+      <section className="library-empty-state">
+        <div className="library-empty-card">
+          <h2>Медиатека пока пуста</h2>
+          <p>Нажмите на кнопку плюс справа сверху и загрузите первые фотографии в свою библиотеку.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="library-grid" aria-label="Photo library">
       {photos.map((photo) => (
         <article key={photo.id} className="photo-card">
-          <img src={photo.src} alt="" />
+          <img src={photo.src} alt={photo.originalFilename} />
           <div className="photo-overlay" />
         </article>
       ))}
