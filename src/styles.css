@@ -1004,12 +1004,13 @@ button {
   .people-hero-copy,
   .search-hero-copy {
     max-width: 100%;
-    padding-top: 4.35rem;
+    padding-right: 8.25rem;
   }
 
   .hero-copy h1 {
     font-size: clamp(2.25rem, 12vw, 3.25rem);
     line-height: 0.94;
+    margin-top: 0.9rem;
   }
 
   .hero-copy p {
