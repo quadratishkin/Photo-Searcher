@@ -1,134 +1,134 @@
 # Liquid Photos
 
-Liquid Photos is a smart photo library concept for a university lab project focused on neural networks, intelligent media retrieval, and demo-ready interface design.
+Liquid Photos — это концепт умной фотобиблиотеки для университетской лабораторной работы, посвящённой нейросетям, интеллектуальному поиску по медиа и demo-ready интерфейсам.
 
-The goal of the project is to build a web application where a user can:
+Цель проекта — создать веб-приложение, в котором пользователь сможет:
 
-- upload and browse a personal photo library,
-- search photos using natural language,
-- discover and group people found across images,
-- interact with the system through a clean, modern interface inspired by Liquid Glass design.
+- загружать и просматривать личную фотобиблиотеку,
+- искать фотографии с помощью естественного языка,
+- находить и группировать людей на снимках,
+- взаимодействовать с системой через чистый современный интерфейс в стиле Liquid Glass.
 
-## Current Status
+## Текущее состояние
 
-The repository currently contains a **frontend prototype** used to design and validate the user interface before backend integration.
+Сейчас репозиторий содержит **frontend-прототип**, который используется для проектирования интерфейса и проверки пользовательских сценариев до подключения backend-части.
 
-Implemented so far:
+Уже реализовано:
 
-- fullscreen media gallery,
-- bottom tab navigation for `Медиа`, `Поиск`, and `Люди`,
-- interactive search input,
-- people grid with circular portrait cards,
-- top action buttons for search and photo selection,
-- local demo assets for reliable preview across devices in the same network.
+- полноэкранная галерея медиа,
+- нижняя навигация по вкладкам `Медиа`, `Поиск` и `Люди`,
+- интерактивное поле поиска,
+- вкладка `Люди` с сеткой круглых портретов,
+- верхние action-кнопки для перехода в поиск и выбора фото,
+- локальные demo-изображения для стабильного просмотра на других устройствах в сети.
 
-Backend logic for authentication, uploads, indexing, semantic search, and people clustering is planned but not yet implemented in this repository.
+Логика backend для аутентификации, загрузки, индексации, семантического поиска и кластеризации людей ещё не реализована в этом репозитории.
 
-## Features
+## Возможности
 
-### Media Library
+### Медиатека
 
-- square photo grid layout,
-- mobile-app style fullscreen presentation,
-- upload entry point from the main interface.
+- квадратная сетка фотографий,
+- fullscreen-подача в стиле мобильной галереи,
+- точка входа для загрузки фото прямо из интерфейса.
 
-### Smart Search
+### Умный поиск
 
-- natural-language photo search concept,
-- editable search composer,
-- layout prepared for future AI-powered search results.
+- концепт поиска по фото на естественном языке,
+- редактируемое поле ввода запроса,
+- подготовленный layout для будущих AI-результатов.
 
-### People
+### Люди
 
-- grouped people view,
-- circular person cards,
-- space for named and unnamed person clusters.
+- экран с найденными людьми,
+- круглые карточки-портреты,
+- место для именованных и неименованных групп людей.
 
-## Tech Stack
+## Технологии
 
-Current frontend stack:
+Текущий frontend-стек:
 
 - **React 19**
 - **TypeScript**
 - **Vite**
 - **CSS**
 
-Planned broader project direction:
+Планируемое общее направление проекта:
 
 - **Python**
 - **Django**
-- local image storage
-- AI-based search and person grouping pipeline
+- локальное хранение изображений
+- AI-пайплайн для поиска и группировки людей
 
-## Project Goals
+## Цели проекта
 
-The main priorities of Liquid Photos are:
+Основные приоритеты Liquid Photos:
 
-1. intelligent photo search quality,
-2. visible demo-ready functionality,
-3. understandable architecture,
-4. clean and convincing UI.
+1. качество интеллектуального поиска по фото,
+2. заметная demo-ready функциональность,
+3. понятная архитектура,
+4. чистый и убедительный интерфейс.
 
-This is a lab/demo project, not a production-scale platform.
+Это учебный demo-проект, а не production-платформа.
 
-## Getting Started
+## Быстрый старт
 
-### Install dependencies
+### Установка зависимостей
 
 ```bash
 pnpm install
 ```
 
-### Run the development server
+### Запуск dev-сервера
 
 ```bash
 pnpm dev
 ```
 
-### Run with LAN access
+### Запуск с доступом по локальной сети
 
 ```bash
 pnpm dev --host 0.0.0.0
 ```
 
-### Build for production
+### Production-сборка
 
 ```bash
 pnpm build
 ```
 
-## Project Structure
+## Структура проекта
 
 ```text
 .
-├── public/demo/         # local demo images for media and people
+├── public/demo/         # локальные demo-изображения для медиатеки и людей
 ├── src/
-│   ├── App.tsx          # main UI prototype
-│   ├── main.tsx         # React entry point
-│   └── styles.css       # global styling
-├── AGENTS.md            # repository-specific agent context
+│   ├── App.tsx          # основной UI-прототип
+│   ├── main.tsx         # точка входа React
+│   └── styles.css       # глобальные стили
+├── AGENTS.md            # контекст и правила для агента
 ├── package.json
 └── vite.config.ts
 ```
 
-## Design Direction
+## Визуальное направление
 
-The interface is being explored in a style inspired by:
+Интерфейс проектируется под влияние:
 
-- Apple-like Liquid Glass surfaces,
-- mobile gallery interactions,
-- minimal AI-search interfaces.
+- Apple-like Liquid Glass поверхностей,
+- мобильных фотогалерей,
+- минималистичных AI-search интерфейсов.
 
-The current prototype focuses on visual direction and interaction flow first, then backend integration second.
+Сейчас основной фокус — визуальный язык и пользовательский flow, а уже затем интеграция backend-логики.
 
 ## Roadmap
 
-- add login and registration screens,
-- connect photo upload to backend,
-- implement semantic search API,
-- implement person detection and grouping flow,
-- integrate real search and people results into the frontend.
+- добавить экраны входа и регистрации,
+- подключить загрузку фото к backend,
+- реализовать API семантического поиска,
+- реализовать поиск и группировку людей,
+- связать реальные результаты поиска и людей с frontend-интерфейсом.
 
-## License
+## Статус
 
-This project is currently developed as an academic/lab work in progress.
+Проект разрабатывается как учебная лабораторная работа и находится в активной стадии прототипирования.
