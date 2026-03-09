@@ -58,15 +58,6 @@ const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'people', label: 'Люди' },
 ];
 
-const people = [
-  { id: 1, name: 'Анна', count: 28, photo: '/demo/people/person-01.jpg' },
-  { id: 2, name: 'Человек 2', count: 14, photo: '/demo/people/person-02.jpg' },
-  { id: 3, name: 'Максим', count: 19, photo: '/demo/people/person-03.jpg' },
-  { id: 4, name: 'Человек 4', count: 8, photo: '/demo/people/person-04.jpg' },
-  { id: 5, name: 'Елена', count: 11, photo: '/demo/people/person-05.jpg' },
-  { id: 6, name: 'Человек 6', count: 6, photo: '/demo/people/person-06.jpg' },
-];
-
 const DEFAULT_AUTH_FIELDS = {
   username: '',
   password: '',
@@ -499,8 +490,10 @@ function App() {
             }}
           />
         )}
-        {activeTab === 'search' && <SearchView searchQuery={searchQuery} setSearchQuery={setSearchQuery} />}
-        {activeTab === 'people' && <PeopleView />}
+        {activeTab === 'search' && (
+          <SearchView aiStatus={aiStatus} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+        )}
+        {activeTab === 'people' && <PeopleView aiStatus={aiStatus} />}
       </main>
 
       {photoMenu && (
@@ -679,12 +672,16 @@ function LibraryView({
 }
 
 function SearchView({
+  aiStatus,
   searchQuery,
   setSearchQuery,
 }: {
+  aiStatus: AiStatusResponse;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
 }) {
+  const isAiUnavailable = !aiStatus.enabled;
+
   return (
     <section className="search-stage">
       <div className="search-intro">
@@ -725,24 +722,36 @@ function SearchView({
           </div>
         </div>
       </div>
+
+      {isAiUnavailable && (
+        <div className="feature-status-card">
+          <span className="feature-status-eyebrow">Поиск временно недоступен</span>
+          <h3>AI-модуль отключён</h3>
+          <p>Семантический поиск по фото недоступен, потому что AI-модуль сейчас не загружается.</p>
+          <strong>{aiStatus.details}</strong>
+        </div>
+      )}
     </section>
   );
 }
 
-function PeopleView() {
+function PeopleView({ aiStatus }: { aiStatus: AiStatusResponse }) {
+  const isAiUnavailable = !aiStatus.enabled;
+
   return (
     <section className="panel-view">
-      <div className="people-grid">
-        {people.map((person) => (
-          <article key={person.id} className="person-tile">
-            <div className="person-portrait-shell">
-              <img className="person-portrait" src={person.photo} alt={person.name} />
-            </div>
-            <span className="person-count">{person.count} фото</span>
-            <h3>{person.name}</h3>
-          </article>
-        ))}
-      </div>
+      <section className="library-empty-state people-empty-state">
+        <div className="library-empty-card feature-status-card">
+          <span className="feature-status-eyebrow">Люди временно недоступны</span>
+          <h2>{isAiUnavailable ? 'Поиск по людям отключён' : 'Распознавание людей ещё не подключено'}</h2>
+          <p>
+            {isAiUnavailable
+              ? 'Вкладка с людьми не может показать найденные лица, потому что AI-модуль отключён в конфиге проекта.'
+              : 'Дизайн вкладки уже готов, но реальные данные и группировка людей появятся после подключения AI-пайплайна.'}
+          </p>
+          <strong>{aiStatus.details}</strong>
+        </div>
+      </section>
     </section>
   );
 }
