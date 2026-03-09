@@ -73,6 +73,7 @@ function App() {
   const [animateView, setAnimateView] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -158,6 +159,7 @@ function App() {
     setAuthFields(DEFAULT_AUTH_FIELDS);
     setAuthErrors({});
     setAuthMessage('');
+    setUserMenuOpen(false);
   }
 
   function openPhotoPicker() {
@@ -228,18 +230,33 @@ function App() {
             <span className="status-badge-label">{AI_MODULE_INFO.name}</span>
             <strong>{AI_MODULE_INFO.details}</strong>
           </div>
-          <div className="user-badge">
-            <span className="user-badge-label">Пользователь</span>
-            <strong>{user.username}</strong>
+          <div className="user-menu">
+            <button
+              className={`user-badge user-badge-button ${userMenuOpen ? 'active' : ''}`}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
+              onClick={() => setUserMenuOpen((current) => !current)}
+            >
+              <span className="user-badge-label">Пользователь</span>
+              <strong>{user.username}</strong>
+            </button>
+
+            {userMenuOpen && (
+              <button
+                className="logout-dropdown-button"
+                type="button"
+                onClick={() => void handleLogout()}
+              >
+                Выйти из аккаунта
+              </button>
+            )}
           </div>
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
           </button>
           <button className="glass-icon-button primary" aria-label="Добавить фотографии" onClick={openPhotoPicker}>
             <PlusIcon />
-          </button>
-          <button className="glass-icon-button" aria-label="Выйти из аккаунта" onClick={() => void handleLogout()}>
-            <LogoutIcon />
           </button>
         </div>
       </header>
@@ -489,17 +506,6 @@ function WaveIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M5.5 9.25a1 1 0 0 1 1 1v3.5a1 1 0 1 1-2 0v-3.5a1 1 0 0 1 1-1Zm4-2.25a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1Zm4 3a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1Zm4-4a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M10.75 4.75a.75.75 0 0 1 0 1.5H8a1.75 1.75 0 0 0-1.75 1.75v8A1.75 1.75 0 0 0 8 17.75h2.75a.75.75 0 0 1 0 1.5H8A3.25 3.25 0 0 1 4.75 16V8A3.25 3.25 0 0 1 8 4.75h2.75Zm5.72 2.97a.75.75 0 0 1 1.06 0l3.72 3.72a.75.75 0 0 1 0 1.06l-3.72 3.72a.75.75 0 1 1-1.06-1.06l2.44-2.44H10a.75.75 0 0 1 0-1.5h8.91l-2.44-2.44a.75.75 0 0 1 0-1.06Z"
         fill="currentColor"
       />
     </svg>
