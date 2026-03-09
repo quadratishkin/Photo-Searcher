@@ -144,20 +144,25 @@ button {
   position: relative;
   z-index: 1;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   padding-top: 0.2rem;
+  padding-left: 0.1rem;
 }
 
 .auth-title-block {
   text-align: center;
   margin-bottom: 1.35rem;
+  min-height: 9.5rem;
+  display: grid;
+  align-content: start;
 }
 
 .auth-title-block h1 {
   margin: 0;
-  font-size: clamp(2.6rem, 6vw, 4.4rem);
-  line-height: 0.94;
+  font-size: clamp(2.8rem, 6vw, 4.2rem);
+  line-height: 0.98;
   letter-spacing: -0.06em;
+  text-wrap: balance;
 }
 
 .auth-title-block p {
@@ -178,6 +183,8 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(28px) saturate(165%);
+  align-self: start;
+  margin-top: 4.5rem;
 }
 
 .auth-card-header {
@@ -747,10 +754,15 @@ button {
     font-size: clamp(2.5rem, 13vw, 3.6rem);
   }
 
+  .auth-title-block {
+    min-height: 8.4rem;
+  }
+
   .auth-card {
     width: min(100%, 32rem);
     padding: 1rem;
     border-radius: 1.75rem;
+    margin-top: 2.2rem;
   }
 
   .app-shell {

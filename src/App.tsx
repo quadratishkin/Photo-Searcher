@@ -304,7 +304,7 @@ function AuthScreen({
       <section className="auth-layout">
         <div className="auth-card">
           <div className="auth-title-block">
-            <h1>{isRegister ? 'Создайте аккаунт' : 'Войдите в медиатеку'}</h1>
+            <h1>{isRegister ? 'Создайте аккаунт' : 'Вход в медиатеку'}</h1>
             <p>
               {isRegister
                 ? 'Один аккаунт хранит вашу личную библиотеку, поиск по фото и найденных людей.'
