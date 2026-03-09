@@ -56,6 +56,11 @@ const DEFAULT_AUTH_FIELDS = {
   passwordConfirm: '',
 };
 
+const AI_MODULE_INFO = {
+  name: 'AI-модуль',
+  details: 'XPC / CUDA / RTX 5070 Ti',
+};
+
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -219,6 +224,10 @@ function App() {
           <div className="topbar-spacer" />
         )}
         <div className="action-row">
+          <div className="status-badge ai-badge">
+            <span className="status-badge-label">{AI_MODULE_INFO.name}</span>
+            <strong>{AI_MODULE_INFO.details}</strong>
+          </div>
           <div className="user-badge">
             <span className="user-badge-label">Пользователь</span>
             <strong>{user.username}</strong>
