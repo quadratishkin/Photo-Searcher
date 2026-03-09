@@ -85,8 +85,9 @@ button {
 }
 
 .topbar-compact {
-  min-height: 5.2rem;
+  min-height: 3.8rem;
   align-items: center;
+  padding-bottom: 0.35rem;
 }
 
 .hero-copy {
@@ -422,7 +423,8 @@ button {
   text-align: left;
   justify-self: start;
   max-width: 34rem;
-  padding: 0.15rem 0 0.4rem;
+  margin-top: -0.1rem;
+  padding: 0 0 0.4rem;
 }
 
 .people-eyebrow {
@@ -586,6 +588,11 @@ button {
 
   .topbar-compact .action-row {
     width: auto;
+  }
+
+  .topbar-compact {
+    min-height: 3.25rem;
+    padding-bottom: 0.2rem;
   }
 
   .search-stage {
