@@ -5,6 +5,7 @@ from pathlib import Path
 
 MODEL_NAME = "ViT-B-32"
 PRETRAINED_TAG = "laion2b_s34b_b79k"
+SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def _detect_device() -> str:
@@ -14,7 +15,11 @@ def _detect_device() -> str:
 
 
 def _iter_image_paths(data_dir: Path) -> list[Path]:
-    return sorted(data_dir.rglob("*.jpg"))
+    return sorted(
+        path
+        for path in data_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
+    )
 
 
 def export_embeddings_txt() -> None:
@@ -28,7 +33,7 @@ def export_embeddings_txt() -> None:
     image_paths = _iter_image_paths(data_dir)
 
     if not image_paths:
-        raise FileNotFoundError(f"No .jpg files found under {data_dir}")
+        raise FileNotFoundError(f"No supported image files found under {data_dir}")
 
     device = _detect_device()
     model, _, preprocess = open_clip.create_model_and_transforms(

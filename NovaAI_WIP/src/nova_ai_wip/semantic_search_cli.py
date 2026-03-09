@@ -8,6 +8,7 @@ from pathlib import Path
 MODEL_NAME = "ViT-B-32"
 PRETRAINED_TAG = "laion2b_s34b_b79k"
 TOP_K = 3
+SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 @dataclass
@@ -38,6 +39,16 @@ def _paths() -> tuple[Path, Path]:
     return data_dir, embedding_dir
 
 
+def _resolve_image_path(data_dir: Path, relative_txt_path: Path) -> Path:
+    stem_path = data_dir / relative_txt_path.with_suffix("")
+    for extension in SUPPORTED_IMAGE_EXTENSIONS:
+        candidate = stem_path.with_suffix(extension)
+        if candidate.exists():
+            return candidate
+
+    raise FileNotFoundError(f"Image file not found for embedding: {stem_path}")
+
+
 def _load_embedding(txt_path: Path) -> list[float]:
     return [float(line.strip()) for line in txt_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
@@ -54,10 +65,8 @@ def _load_index() -> tuple[list[Path], list[list[float]]]:
     vectors: list[list[float]] = []
 
     for txt_path in txt_paths:
-        relative_path = txt_path.relative_to(embedding_dir).with_suffix(".jpg")
-        image_path = data_dir / relative_path
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image file not found for embedding: {image_path}")
+        relative_path = txt_path.relative_to(embedding_dir)
+        image_path = _resolve_image_path(data_dir, relative_path)
 
         image_paths.append(image_path)
         vectors.append(_load_embedding(txt_path))
