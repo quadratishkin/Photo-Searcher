@@ -6,12 +6,16 @@ from django.contrib import admin
 from django.urls import path, re_path
 from django.views.static import serve
 
-from web.views import index
+from web.views import auth_login, auth_logout, auth_me, auth_register, index
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", index, name="index"),
+    path("api/auth/me", auth_me, name="auth-me"),
+    path("api/auth/login", auth_login, name="auth-login"),
+    path("api/auth/register", auth_register, name="auth-register"),
+    path("api/auth/logout", auth_logout, name="auth-logout"),
 ]
 
 if settings.DEBUG:

@@ -1,10 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 type TabId = 'library' | 'search' | 'people';
+type AuthMode = 'login' | 'register';
 
 type PhotoItem = {
   id: number;
   src: string;
+};
+
+type AuthUser = {
+  id: number;
+  username: string;
+};
+
+type AuthResponse = {
+  authenticated: boolean;
+  user?: AuthUser;
+  message?: string;
+  fieldErrors?: Record<string, string>;
 };
 
 const tabs: Array<{ id: TabId; label: string }> = [
@@ -29,45 +42,28 @@ const photos: PhotoItem[] = [
 ];
 
 const people = [
-  {
-    id: 1,
-    name: 'Анна',
-    count: 28,
-    photo: '/demo/people/person-01.jpg',
-  },
-  {
-    id: 2,
-    name: 'Человек 2',
-    count: 14,
-    photo: '/demo/people/person-02.jpg',
-  },
-  {
-    id: 3,
-    name: 'Максим',
-    count: 19,
-    photo: '/demo/people/person-03.jpg',
-  },
-  {
-    id: 4,
-    name: 'Человек 4',
-    count: 8,
-    photo: '/demo/people/person-04.jpg',
-  },
-  {
-    id: 5,
-    name: 'Елена',
-    count: 11,
-    photo: '/demo/people/person-05.jpg',
-  },
-  {
-    id: 6,
-    name: 'Человек 6',
-    count: 6,
-    photo: '/demo/people/person-06.jpg',
-  },
+  { id: 1, name: 'Анна', count: 28, photo: '/demo/people/person-01.jpg' },
+  { id: 2, name: 'Человек 2', count: 14, photo: '/demo/people/person-02.jpg' },
+  { id: 3, name: 'Максим', count: 19, photo: '/demo/people/person-03.jpg' },
+  { id: 4, name: 'Человек 4', count: 8, photo: '/demo/people/person-04.jpg' },
+  { id: 5, name: 'Елена', count: 11, photo: '/demo/people/person-05.jpg' },
+  { id: 6, name: 'Человек 6', count: 6, photo: '/demo/people/person-06.jpg' },
 ];
 
+const DEFAULT_AUTH_FIELDS = {
+  username: '',
+  password: '',
+  passwordConfirm: '',
+};
+
 function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authFields, setAuthFields] = useState(DEFAULT_AUTH_FIELDS);
+  const [authMessage, setAuthMessage] = useState('');
+  const [authErrors, setAuthErrors] = useState<Record<string, string>>({});
+  const [authPending, setAuthPending] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('library');
   const [animateView, setAnimateView] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,10 +71,89 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    void loadCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     setAnimateView(false);
     const frame = requestAnimationFrame(() => setAnimateView(true));
     return () => cancelAnimationFrame(frame);
-  }, [activeTab]);
+  }, [activeTab, user]);
+
+  async function loadCurrentUser() {
+    try {
+      const response = await fetch('/api/auth/me');
+      if (!response.ok) {
+        setUser(null);
+        return;
+      }
+
+      const data = (await response.json()) as AuthResponse;
+      setUser(data.user ?? null);
+    } finally {
+      setAuthChecked(true);
+    }
+  }
+
+  function getCookie(name: string) {
+    const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
+    return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+  }
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthPending(true);
+    setAuthMessage('');
+    setAuthErrors({});
+
+    const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify(authFields),
+      });
+
+      const data = (await response.json()) as AuthResponse;
+      if (!response.ok) {
+        setAuthMessage(data.message ?? 'Не удалось выполнить авторизацию.');
+        setAuthErrors(data.fieldErrors ?? {});
+        return;
+      }
+
+      setUser(data.user ?? null);
+      setAuthFields(DEFAULT_AUTH_FIELDS);
+      setAuthMessage('');
+      setAuthErrors({});
+    } catch {
+      setAuthMessage('Не удалось связаться с сервером авторизации.');
+    } finally {
+      setAuthPending(false);
+    }
+  }
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+    });
+
+    setUser(null);
+    setAuthMode('login');
+    setAuthFields(DEFAULT_AUTH_FIELDS);
+    setAuthErrors({});
+    setAuthMessage('');
+  }
 
   function openPhotoPicker() {
     fileInputRef.current?.click();
@@ -87,6 +162,35 @@ function App() {
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     setSelectedFiles(files.map((file) => file.name));
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="auth-shell loading-shell">
+        <div className="ambient ambient-left" />
+        <div className="ambient ambient-right" />
+        <div className="loading-badge">Проверяем сессию...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AuthScreen
+        mode={authMode}
+        fields={authFields}
+        pending={authPending}
+        message={authMessage}
+        errors={authErrors}
+        onModeChange={(mode) => {
+          setAuthMode(mode);
+          setAuthMessage('');
+          setAuthErrors({});
+        }}
+        onFieldChange={(name, value) => setAuthFields((current) => ({ ...current, [name]: value }))}
+        onSubmit={submitAuth}
+      />
+    );
   }
 
   return (
@@ -115,11 +219,18 @@ function App() {
           <div className="topbar-spacer" />
         )}
         <div className="action-row">
+          <div className="user-badge">
+            <span className="user-badge-label">Пользователь</span>
+            <strong>{user.username}</strong>
+          </div>
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
           </button>
           <button className="glass-icon-button primary" aria-label="Добавить фотографии" onClick={openPhotoPicker}>
             <PlusIcon />
+          </button>
+          <button className="glass-icon-button" aria-label="Выйти из аккаунта" onClick={() => void handleLogout()}>
+            <LogoutIcon />
           </button>
         </div>
       </header>
@@ -157,6 +268,117 @@ function App() {
           </button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+function AuthScreen({
+  mode,
+  fields,
+  pending,
+  message,
+  errors,
+  onModeChange,
+  onFieldChange,
+  onSubmit,
+}: {
+  mode: AuthMode;
+  fields: typeof DEFAULT_AUTH_FIELDS;
+  pending: boolean;
+  message: string;
+  errors: Record<string, string>;
+  onModeChange: (mode: AuthMode) => void;
+  onFieldChange: (name: keyof typeof DEFAULT_AUTH_FIELDS, value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isRegister = mode === 'register';
+
+  return (
+    <div className="auth-shell">
+      <div className="ambient ambient-left" />
+      <div className="ambient ambient-right" />
+
+      <section className="auth-layout">
+        <div className="auth-copy">
+          <span className="eyebrow">Liquid Photos</span>
+          <h1>{isRegister ? 'Создайте аккаунт' : 'Войдите в медиатеку'}</h1>
+          <p>
+            {isRegister
+              ? 'Один аккаунт хранит вашу личную библиотеку, поиск по фото и найденных людей.'
+              : 'Авторизуйтесь, чтобы открыть личную фотобиблиотеку, поиск и вкладку с найденными людьми.'}
+          </p>
+
+          <div className="auth-points">
+            <div className="auth-point">
+              <strong>Сессия сохраняется</strong>
+              <span>После входа приложение помнит пользователя и не просит логиниться при каждом запуске.</span>
+            </div>
+            <div className="auth-point">
+              <strong>Demo-ready вход</strong>
+              <span>Пока используется простая авторизация по имени пользователя и паролю без лишней сложности.</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="auth-card">
+          <div className="auth-card-header">
+            <button className={`auth-mode-button ${mode === 'login' ? 'active' : ''}`} onClick={() => onModeChange('login')}>
+              Вход
+            </button>
+            <button
+              className={`auth-mode-button ${mode === 'register' ? 'active' : ''}`}
+              onClick={() => onModeChange('register')}
+            >
+              Регистрация
+            </button>
+          </div>
+
+          <form className="auth-form" onSubmit={onSubmit}>
+            <label className="auth-field">
+              <span>Имя пользователя</span>
+              <input
+                value={fields.username}
+                onChange={(event) => onFieldChange('username', event.target.value)}
+                placeholder="Например: egor"
+                autoComplete="username"
+              />
+              {errors.username && <small>{errors.username}</small>}
+            </label>
+
+            <label className="auth-field">
+              <span>Пароль</span>
+              <input
+                type="password"
+                value={fields.password}
+                onChange={(event) => onFieldChange('password', event.target.value)}
+                placeholder="Не менее 8 символов"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+              />
+              {errors.password && <small>{errors.password}</small>}
+            </label>
+
+            {isRegister && (
+              <label className="auth-field">
+                <span>Повторите пароль</span>
+                <input
+                  type="password"
+                  value={fields.passwordConfirm}
+                  onChange={(event) => onFieldChange('passwordConfirm', event.target.value)}
+                  placeholder="Повторите пароль"
+                  autoComplete="new-password"
+                />
+                {errors.passwordConfirm && <small>{errors.passwordConfirm}</small>}
+              </label>
+            )}
+
+            {message && <div className="auth-message">{message}</div>}
+
+            <button className="auth-submit-button" type="submit" disabled={pending}>
+              {pending ? 'Подождите...' : isRegister ? 'Создать аккаунт' : 'Войти'}
+            </button>
+          </form>
+        </div>
+      </section>
     </div>
   );
 }
@@ -220,7 +442,6 @@ function SearchView({
             </button>
           </div>
         </div>
-
       </div>
     </section>
   );
@@ -268,6 +489,17 @@ function WaveIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M5.5 9.25a1 1 0 0 1 1 1v3.5a1 1 0 1 1-2 0v-3.5a1 1 0 0 1 1-1Zm4-2.25a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1Zm4 3a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1Zm4-4a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M10.75 4.75a.75.75 0 0 1 0 1.5H8a1.75 1.75 0 0 0-1.75 1.75v8A1.75 1.75 0 0 0 8 17.75h2.75a.75.75 0 0 1 0 1.5H8A3.25 3.25 0 0 1 4.75 16V8A3.25 3.25 0 0 1 8 4.75h2.75Zm5.72 2.97a.75.75 0 0 1 1.06 0l3.72 3.72a.75.75 0 0 1 0 1.06l-3.72 3.72a.75.75 0 1 1-1.06-1.06l2.44-2.44H10a.75.75 0 0 1 0-1.5h8.91l-2.44-2.44a.75.75 0 0 1 0-1.06Z"
         fill="currentColor"
       />
     </svg>
