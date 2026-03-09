@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type TabId = 'library' | 'search' | 'people';
 
@@ -70,12 +70,24 @@ const people = [
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>('library');
   const [animateView, setAnimateView] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setAnimateView(false);
     const frame = requestAnimationFrame(() => setAnimateView(true));
     return () => cancelAnimationFrame(frame);
   }, [activeTab]);
+
+  function openPhotoPicker() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    setSelectedFiles(files.map((file) => file.name));
+  }
 
   return (
     <div className="app-shell">
@@ -106,17 +118,32 @@ function App() {
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
           </button>
-          <button className="glass-icon-button primary" aria-label="Добавить фотографии">
+          <button className="glass-icon-button primary" aria-label="Добавить фотографии" onClick={openPhotoPicker}>
             <PlusIcon />
           </button>
         </div>
       </header>
 
+      <input
+        ref={fileInputRef}
+        className="sr-only-control"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileChange}
+      />
+
       <main className={`content ${animateView ? 'content-visible' : ''}`}>
         {activeTab === 'library' && <LibraryView />}
-        {activeTab === 'search' && <SearchView />}
+        {activeTab === 'search' && <SearchView searchQuery={searchQuery} setSearchQuery={setSearchQuery} />}
         {activeTab === 'people' && <PeopleView />}
       </main>
+
+      {selectedFiles.length > 0 && (
+        <div className="upload-toast" role="status" aria-live="polite">
+          Выбрано {selectedFiles.length} фото
+        </div>
+      )}
 
       <nav className="tabbar" aria-label="Primary">
         <div className={`tab-highlight ${activeTab}`} />
@@ -147,7 +174,13 @@ function LibraryView() {
   );
 }
 
-function SearchView() {
+function SearchView({
+  searchQuery,
+  setSearchQuery,
+}: {
+  searchQuery: string;
+  setSearchQuery: (value: string) => void;
+}) {
   return (
     <section className="search-stage">
       <div className="search-intro">
@@ -157,7 +190,17 @@ function SearchView() {
 
       <div className="search-composer">
         <div className="search-input-shell">
-          <div className="search-input-placeholder">Например: девушка в очках рядом с машиной</div>
+          <label className="sr-only-control" htmlFor="search-query">
+            Поисковый запрос
+          </label>
+          <textarea
+            id="search-query"
+            className="search-textarea"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Например: девушка в очках рядом с машиной"
+            rows={2}
+          />
 
           <div className="search-toolbar">
             <button className="search-tool-button" aria-label="Добавить фильтр">

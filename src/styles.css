@@ -38,6 +38,10 @@ input {
   font: inherit;
 }
 
+textarea {
+  font: inherit;
+}
+
 button {
   border: 0;
 }
@@ -49,6 +53,18 @@ button {
   padding: var(--shell-padding);
   display: flex;
   flex-direction: column;
+}
+
+.sr-only-control {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .ambient {
@@ -282,13 +298,21 @@ button {
   -webkit-backdrop-filter: blur(26px) saturate(160%);
 }
 
-.search-input-placeholder {
+.search-textarea {
+  width: 100%;
   min-height: 4rem;
-  display: flex;
-  align-items: flex-start;
-  color: rgba(255, 255, 255, 0.54);
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: #fff;
   font-size: clamp(1.06rem, 2vw, 1.28rem);
   line-height: 1.35;
+}
+
+.search-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.54);
 }
 
 .search-toolbar {
@@ -471,6 +495,23 @@ button {
   font-size: 0.95rem;
 }
 
+.upload-toast {
+  position: fixed;
+  top: 1.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+
 .tabbar {
   position: fixed;
   left: 50%;
@@ -584,7 +625,7 @@ button {
     border-radius: 1.55rem;
   }
 
-  .search-input-placeholder {
+  .search-textarea {
     min-height: 3.2rem;
     font-size: 1.02rem;
   }
