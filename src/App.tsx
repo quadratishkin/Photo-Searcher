@@ -57,7 +57,7 @@ const DEFAULT_AUTH_FIELDS = {
 };
 
 const AI_MODULE_INFO = {
-  name: 'AI-модуль',
+  name: 'Модуль подключен',
   details: 'XPC / CUDA / RTX 5070 Ti',
 };
 
