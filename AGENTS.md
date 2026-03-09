@@ -116,6 +116,72 @@ You do **not** need to force a specific AI stack unless the task requires it. If
 
 ---
 
+## Current Frontend State
+
+As of March 9, 2026, the repository already contains a **frontend-only UI concept** for the demo.
+
+### Frontend stack currently in use
+
+- **React 19**
+- **TypeScript**
+- **Vite**
+- plain **CSS** (no Tailwind, no component library)
+
+### Current implementation status
+
+- The current repo is **not yet a Django app**.
+- It is a **standalone frontend prototype** used to iterate on design and interaction before backend integration.
+- Main entry points:
+  - `package.json`
+  - `index.html`
+  - `src/App.tsx`
+  - `src/styles.css`
+- Demo images are stored locally under:
+  - `public/demo/media`
+  - `public/demo/people`
+
+### Implemented UI concept
+
+- Fullscreen **media grid** with square photo tiles
+- Bottom **Liquid Glass-style tab bar** with:
+  - `Медиа`
+  - `Поиск`
+  - `Люди`
+- Top-right circular action buttons:
+  - search shortcut
+  - plus button for photo picking
+- `Поиск` tab:
+  - centered search layout
+  - editable textarea so mobile/tablet keyboards appear on focus
+- `Люди` tab:
+  - people shown as a grid of circular portraits
+
+### Current interaction behavior
+
+- The top-right `+` button opens the system image/file picker via a hidden `input[type="file"]`.
+- Selected file count is shown in a temporary glass-style toast.
+- Search input is already interactive, but search logic is still mock/demo-only.
+
+### Local development workflow
+
+- Install deps with `pnpm install`
+- Run dev server with `pnpm dev`
+- Production build check with `pnpm build`
+
+### Local network preview
+
+For testing on other devices in the same LAN, run Vite with host binding enabled:
+
+- `pnpm dev --host 0.0.0.0`
+
+Typical LAN URL on this Mac during the current setup:
+
+- `http://192.168.1.175:5173/`
+
+This IP can change between networks, so always verify it before reporting it as current.
+
+---
+
 ## Context Recovery in a New Chat
 
 When a new chat starts and no conversation context is available, you must first restore context from the repository **efficiently**.
