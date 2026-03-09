@@ -4,6 +4,8 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+LOCAL_DB_DIR = BASE_DIR / "Local_DB"
+LOCAL_DB_DIR.mkdir(exist_ok=True)
 SECRET_KEY = "liquid-photos-demo-secret-key"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -51,7 +53,7 @@ ASGI_APPLICATION = "liquid_photos.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": LOCAL_DB_DIR / "db.sqlite3",
     }
 }
 
