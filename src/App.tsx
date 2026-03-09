@@ -179,8 +179,8 @@ function PeopleView() {
   return (
     <section className="panel-view">
       <div className="people-header">
-        <span className="panel-label">Люди</span>
-        <h2>Здесь собраны люди, которых система нашла на фотографиях</h2>
+        <h2>Люди</h2>
+        <p>Лица, которые система нашла и сгруппировала по фотографиям в вашей медиатеке.</p>
       </div>
 
       <div className="people-grid">

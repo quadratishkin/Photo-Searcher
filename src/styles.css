@@ -419,15 +419,26 @@ button {
 }
 
 .people-header {
-  padding-inline: 0.2rem;
+  text-align: center;
+  justify-self: center;
+  max-width: 38rem;
+  padding: 0.5rem 0 0.35rem;
 }
 
 .people-header h2 {
-  margin: 0.35rem 0 0;
-  max-width: 34rem;
-  font-size: clamp(1.5rem, 4vw, 2.5rem);
-  line-height: 1.08;
-  letter-spacing: -0.05em;
+  margin: 0;
+  font-size: clamp(2.1rem, 5vw, 3.8rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+  font-weight: 800;
+}
+
+.people-header p {
+  margin: 0.85rem auto 0;
+  max-width: 31rem;
+  color: rgba(241, 245, 255, 0.72);
+  font-size: clamp(0.98rem, 1.8vw, 1.08rem);
+  line-height: 1.5;
 }
 
 .people-grid {
@@ -623,5 +634,14 @@ button {
 
   .person-portrait-shell {
     width: min(100%, 8.75rem);
+  }
+
+  .people-header {
+    max-width: 30rem;
+    padding-top: 0.2rem;
+  }
+
+  .people-header p {
+    max-width: 24rem;
   }
 }
