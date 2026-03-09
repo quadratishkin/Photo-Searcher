@@ -191,15 +191,6 @@ button {
     0 24px 40px rgba(0, 0, 0, 0.28);
 }
 
-.photo-card.wide {
-  grid-column: span 2;
-}
-
-.photo-card.tall {
-  grid-row: span 2;
-  aspect-ratio: auto;
-}
-
 .photo-card img,
 .photo-overlay {
   position: absolute;
@@ -430,16 +421,6 @@ button {
   .library-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.55rem;
-  }
-
-  .photo-card,
-  .photo-card.tall {
-    aspect-ratio: 1 / 1;
-    grid-row: span 1;
-  }
-
-  .photo-card.wide {
-    grid-column: span 1;
   }
 
   .glass-icon-button {

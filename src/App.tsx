@@ -5,7 +5,6 @@ type TabId = 'library' | 'search' | 'people';
 type PhotoItem = {
   id: number;
   src: string;
-  span?: 'wide' | 'tall';
 };
 
 const tabs: Array<{ id: TabId; label: string }> = [
@@ -15,16 +14,16 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ];
 
 const photos: PhotoItem[] = [
-  { id: 1, src: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80', span: 'wide' },
+  { id: 1, src: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80' },
   { id: 2, src: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=900&q=80' },
   { id: 3, src: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80' },
-  { id: 4, src: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80', span: 'tall' },
+  { id: 4, src: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80' },
   { id: 5, src: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80' },
   { id: 6, src: 'https://images.unsplash.com/photo-1511988617509-a57c8a288659?auto=format&fit=crop&w=900&q=80' },
   { id: 7, src: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80' },
   { id: 8, src: 'https://images.unsplash.com/photo-1504198453319-5ce911bafcde?auto=format&fit=crop&w=900&q=80' },
   { id: 9, src: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80' },
-  { id: 10, src: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=900&q=80', span: 'wide' },
+  { id: 10, src: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=900&q=80' },
   { id: 11, src: 'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?auto=format&fit=crop&w=900&q=80' },
   { id: 12, src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80' },
 ];
@@ -93,7 +92,7 @@ function LibraryView() {
   return (
     <section className="library-grid" aria-label="Photo library">
       {photos.map((photo) => (
-        <article key={photo.id} className={`photo-card ${photo.span ?? ''}`}>
+        <article key={photo.id} className="photo-card">
           <img src={photo.src} alt="" />
           <div className="photo-overlay" />
         </article>
