@@ -1004,7 +1004,7 @@ button {
   .people-hero-copy,
   .search-hero-copy {
     max-width: 100%;
-    padding-right: 8.25rem;
+    padding-right: 0;
   }
 
   .hero-copy h1 {
@@ -1017,6 +1017,14 @@ button {
     max-width: 100%;
     margin-top: 0.7rem;
     font-size: 0.96rem;
+  }
+
+  .eyebrow {
+    min-height: 3.35rem;
+    max-width: calc(100% - 8rem);
+    margin-bottom: 0;
+    padding: 0.7rem 1rem;
+    font-size: 0.88rem;
   }
 
   .action-row {
@@ -1057,8 +1065,6 @@ button {
   }
 
   .search-input-shell {
-    display: flex;
-    flex-direction: column;
     padding: 1.05rem 0.95rem 0.9rem;
     border-radius: 1.55rem;
   }
@@ -1069,12 +1075,11 @@ button {
   }
 
   .search-toolbar {
-    order: -1;
     display: flex;
     gap: 0.7rem;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 0.85rem;
+    margin-top: 0.85rem;
   }
 
   .search-suggestions-inline {
@@ -1176,7 +1181,8 @@ button {
 
 @media (max-width: 420px) {
   .eyebrow {
-    min-height: 2.75rem;
+    min-height: 3.2rem;
+    max-width: calc(100% - 7.35rem);
     padding: 0.6rem 0.9rem;
     font-size: 0.84rem;
   }
