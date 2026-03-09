@@ -4,3 +4,6 @@ dist/
 *.tsbuildinfo
 .vite/
 *.log
+frontend_build/
+db.sqlite3
+.venv/
