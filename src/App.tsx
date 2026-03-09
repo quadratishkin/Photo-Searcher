@@ -29,9 +29,42 @@ const photos: PhotoItem[] = [
 ];
 
 const people = [
-  { id: 1, name: 'Anna', count: 28, hint: 'Beach portraits and city walks' },
-  { id: 2, name: 'Maksim', count: 14, hint: 'Studio and outdoor shots' },
-  { id: 3, name: 'Unsorted', count: 9, hint: 'Needs name assignment' },
+  {
+    id: 1,
+    name: 'Анна',
+    count: 28,
+    photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 2,
+    name: 'Человек 2',
+    count: 14,
+    photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 3,
+    name: 'Максим',
+    count: 19,
+    photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 4,
+    name: 'Человек 4',
+    count: 8,
+    photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 5,
+    name: 'Елена',
+    count: 11,
+    photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 6,
+    name: 'Человек 6',
+    count: 6,
+    photo: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=900&q=80',
+  },
 ];
 
 function App() {
@@ -131,21 +164,19 @@ function SearchView() {
 function PeopleView() {
   return (
     <section className="panel-view">
-      <div className="glass-panel panel-large">
+      <div className="people-header">
         <span className="panel-label">Люди</span>
-        <h2>Найденные лица и группы</h2>
-        <p>Позже здесь появятся сгруппированные люди и возможность присваивать им понятные имена.</p>
+        <h2>Здесь собраны люди, которых система нашла на фотографиях</h2>
       </div>
 
-      <div className="people-list">
+      <div className="people-grid">
         {people.map((person) => (
-          <article key={person.id} className="glass-person-card">
-            <div className="person-avatar">{person.name.slice(0, 1)}</div>
-            <div>
-              <h3>{person.name}</h3>
-              <p>{person.hint}</p>
+          <article key={person.id} className="person-tile">
+            <div className="person-portrait-shell">
+              <img className="person-portrait" src={person.photo} alt={person.name} />
             </div>
-            <span>{person.count} фото</span>
+            <span className="person-count">{person.count} фото</span>
+            <h3>{person.name}</h3>
           </article>
         ))}
       </div>
