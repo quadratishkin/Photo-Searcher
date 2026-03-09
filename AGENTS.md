@@ -320,6 +320,17 @@ Examples:
 - app startup sanity checks
 - targeted manual flow verification for the changed feature
 
+### Required verification for web/API changes
+
+If a task adds or changes web functionality, HTTP routes, form submission, authentication, uploads, or any API behavior, the agent must verify the behavior with real HTTP requests against the locally running application.
+
+Expected verification methods:
+- `curl`
+- PowerShell `Invoke-WebRequest` / `Invoke-RestMethod`
+- another equivalent HTTP client available in the environment
+
+The agent must not treat static code inspection alone as sufficient verification for web request handling when live local verification is possible.
+
 In your final task report, clearly distinguish:
 - what you changed,
 - what you verified,
