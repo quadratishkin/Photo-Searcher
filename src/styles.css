@@ -86,11 +86,19 @@ button {
 
 .topbar-compact {
   min-height: 3.8rem;
-  align-items: center;
+  align-items: flex-start;
   padding-bottom: 0.35rem;
 }
 
+.topbar-spacer {
+  min-height: 1px;
+}
+
 .hero-copy {
+  max-width: 34rem;
+}
+
+.people-hero-copy {
   max-width: 34rem;
 }
 
@@ -419,32 +427,8 @@ button {
   font-size: 0.92rem;
 }
 
-.people-header {
-  text-align: left;
-  justify-self: start;
-  max-width: 34rem;
-  margin-top: -0.1rem;
-  padding: 0 0 0.4rem;
-}
-
 .people-eyebrow {
   margin-bottom: 0.95rem;
-}
-
-.people-header h2 {
-  margin: 0;
-  font-size: clamp(2.9rem, 8vw, 5.6rem);
-  line-height: 0.92;
-  letter-spacing: -0.06em;
-  font-weight: 800;
-}
-
-.people-header p {
-  margin: 0.85rem 0 0;
-  max-width: 28rem;
-  color: rgba(241, 245, 255, 0.72);
-  font-size: clamp(0.95rem, 2vw, 1.08rem);
-  line-height: 1.5;
 }
 
 .people-grid {
@@ -647,12 +631,7 @@ button {
     width: min(100%, 8.75rem);
   }
 
-  .people-header {
+  .people-hero-copy {
     max-width: 30rem;
-    padding-top: 0.2rem;
-  }
-
-  .people-header p {
-    max-width: 24rem;
   }
 }

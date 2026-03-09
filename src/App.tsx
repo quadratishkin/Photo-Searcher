@@ -89,8 +89,14 @@ function App() {
             <h1>Медиатека</h1>
             <p>Личная галерея, умный поиск и найденные люди в одном минималистичном интерфейсе.</p>
           </div>
+        ) : activeTab === 'people' ? (
+          <div className="hero-copy people-hero-copy">
+            <span className="eyebrow people-eyebrow">Liquid Photos</span>
+            <h1>Люди</h1>
+            <p>Лица, которые система нашла и сгруппировала по фотографиям в вашей медиатеке.</p>
+          </div>
         ) : (
-          <div />
+          <div className="topbar-spacer" />
         )}
         <div className="action-row">
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
@@ -178,12 +184,6 @@ function SearchView() {
 function PeopleView() {
   return (
     <section className="panel-view">
-      <div className="people-header">
-        <span className="eyebrow people-eyebrow">Liquid Photos</span>
-        <h2>Люди</h2>
-        <p>Лица, которые система нашла и сгруппировала по фотографиям в вашей медиатеке.</p>
-      </div>
-
       <div className="people-grid">
         {people.map((person) => (
           <article key={person.id} className="person-tile">
