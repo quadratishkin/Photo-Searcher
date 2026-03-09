@@ -278,6 +278,10 @@ If appropriate, include a longer body describing:
 ### Push requirement
 After the commit, push the changes remotely.
 
+The commit and push steps must be executed sequentially, not in parallel.
+Do not start `git push` at the same time as `git commit`.
+First run `git commit`, wait for it to finish successfully, then wait about 0.5-1 second, and only after that run `git push`.
+
 If push fails due to authentication, remote setup, or network issues:
 - report it honestly,
 - explain the exact reason,
