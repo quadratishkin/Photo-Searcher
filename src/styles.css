@@ -968,6 +968,10 @@ button {
     max-width: 100%;
   }
 
+  .action-row {
+    gap: 0.6rem;
+  }
+
   .topbar-compact .action-row {
     width: auto;
   }
@@ -1010,6 +1014,11 @@ button {
   .glass-icon-button {
     width: 3.35rem;
     height: 3.35rem;
+  }
+
+  .ai-badge,
+  .user-menu {
+    display: none;
   }
 
   .status-badge,
