@@ -20,8 +20,3 @@ class Translator:
         except Exception as e:
             print(f"[Translator] Ошибка перевода: {e}")
             return None
-
-# Использование
-trans = Translator()
-result = trans.translate("hello world")
-print(result)
