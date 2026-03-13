@@ -3,7 +3,7 @@ from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import clip
 from typing import Union, List, Optional
-from utils.translator import Translator
+from backend.searcher_app.translator import Translator
 
 class PhotoHandler:
     """
