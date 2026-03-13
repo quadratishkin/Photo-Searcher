@@ -7,7 +7,7 @@ from typing import List, Set, Tuple
 import numpy as np
 from numpy import ndarray
 from navec import Navec
-from wordNormalizer import normalizeText
+from .functions.wordNormalizer import normalizeText
 import re
 
 
