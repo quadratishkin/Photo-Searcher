@@ -1,0 +1,2 @@
+from .wordNormalizer import normalizeText
+
