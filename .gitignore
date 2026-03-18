@@ -5,8 +5,8 @@ ENV/
 
 # База данных
 *.sqlite3
-*.db
 db.sqlite3
+/backend/db.sqlite3
 
 # Кэш Python
 __pycache__/
