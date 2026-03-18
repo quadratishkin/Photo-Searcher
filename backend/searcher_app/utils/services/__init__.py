@@ -1,1 +1,1 @@
-from .photo_service import PhotoService
+from .photoService import PhotoService
