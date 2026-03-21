@@ -5,7 +5,9 @@ from .embeddings import (
     create_text_embedding,
     get_engine_metadata,
     get_runtime_status,
+    rewrite_search_query,
     translate_text_to_english,
+    warm_runtime,
 )
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "create_text_embedding",
     "get_engine_metadata",
     "get_runtime_status",
+    "rewrite_search_query",
     "translate_text_to_english",
+    "warm_runtime",
 ]

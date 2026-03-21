@@ -18,6 +18,7 @@ from photo_ai import (
     create_text_embedding,
     get_ai_module_status,
     get_embedding_engine_metadata,
+    rewrite_search_query,
     translate_text_to_english,
 )
 from web.models import Photo
@@ -213,12 +214,24 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     expected_pretrained_tag = str(engine_metadata["pretrained_tag"])
     expected_dimension = int(engine_metadata["embedding_dimension"])
     try:
-        translated_query = translate_text_to_english(query)
+        rewrite_debug = rewrite_search_query(query)
     except Exception:
-        translated_query = query.strip().lower()
+        try:
+            translated_query = translate_text_to_english(query)
+        except Exception:
+            translated_query = query.strip().lower()
+        rewrite_debug = {
+            "original_query": query,
+            "normalized_ru": query.strip(),
+            "normalized_en": translated_query,
+            "search_prompt_en": translated_query,
+            "used_rewriter": False,
+            "fallback_reason": "rewrite_search_query недоступен; использован обычный перевод.",
+        }
 
-    combined_query_text = f"{query.strip()} {translated_query}".strip()
-    english_query_tokens = extract_query_tokens(translated_query)
+    translated_query = str(rewrite_debug["normalized_en"])
+    search_prompt_en = str(rewrite_debug["search_prompt_en"])
+    english_query_tokens = extract_query_tokens(search_prompt_en)
 
     indexed_photos = list(
         Photo.objects.filter(user=request.user, embedding_dimension__gt=0)
@@ -250,7 +263,7 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         )
 
     try:
-        text_embedding = create_text_embedding(combined_query_text)
+        text_embedding = create_text_embedding(search_prompt_en)
     except ValueError as exc:
         return JsonResponse({"message": str(exc)}, status=400)
     except Exception as exc:
@@ -289,6 +302,10 @@ def photo_search(request: HttpRequest) -> JsonResponse:
             "captionScore": round(caption_match_ratio, 6),
             "tokenBonus": round(token_bonus, 6),
             "translatedQuery": translated_query,
+            "normalizedRu": str(rewrite_debug["normalized_ru"]),
+            "searchPromptEn": search_prompt_en,
+            "queryRewriterUsed": bool(rewrite_debug["used_rewriter"]),
+            "queryRewriteFallbackReason": str(rewrite_debug["fallback_reason"]),
         }
         search_hits.append((hybrid_score, photo, debug_meta))
 
@@ -310,6 +327,10 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         {
             "query": query,
             "translatedQuery": translated_query,
+            "normalizedRu": str(rewrite_debug["normalized_ru"]),
+            "searchPromptEn": search_prompt_en,
+            "queryRewriterUsed": bool(rewrite_debug["used_rewriter"]),
+            "queryRewriteFallbackReason": str(rewrite_debug["fallback_reason"]),
             "photos": [
                 {**serialize_search_hit(photo, score), **debug_meta}
                 for score, photo, debug_meta in top_hits

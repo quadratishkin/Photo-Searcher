@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Lock
@@ -13,7 +14,28 @@ DEFAULT_PRETRAINED_TAG = "laion2b_s34b_b79k"
 DEFAULT_CAPTION_MODEL_NAME = "Salesforce/blip-image-captioning-base"
 DEFAULT_TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-ru-en"
 DEFAULT_COMPUTE_DEVICE = "auto"
+DEFAULT_QUERY_REWRITE_ENABLED = False
+DEFAULT_QUERY_REWRITE_MODEL_PATH = "NovaAI-Shipping/models/query-rewriter/Qwen2.5-1.5B-Instruct-4bit"
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
+QUERY_REWRITE_SYSTEM_PROMPT = """You normalize noisy Russian photo-search queries.
+Rules:
+1. Fix obvious typos and slang carefully.
+2. Preserve meaning exactly.
+3. Never replace objects with different objects.
+4. Never add details not present in the query.
+5. Keep ambiguity if the query is ambiguous.
+6. Return strict JSON only with keys normalized_ru, normalized_en, search_prompt_en.
+7. search_prompt_en must be a short English visual search query, not a full explanation.
+8. Keep person references like "я" only if they were already present in the query.
+Examples:
+Input: чел с сабакой на пляжи
+Output: {"normalized_ru":"человек с собакой на пляже","normalized_en":"person with a dog on the beach","search_prompt_en":"person with a dog on the beach"}
+Input: какой то закатик у воды
+Output: {"normalized_ru":"какой-то закат у воды","normalized_en":"sunset by the water","search_prompt_en":"sunset by the water"}
+Input: девка в очках возле тачки на море
+Output: {"normalized_ru":"девушка в очках рядом с машиной у моря","normalized_en":"woman wearing glasses near a car by the sea","search_prompt_en":"woman wearing glasses near a car by the sea"}
+"""
 
 
 @dataclass(frozen=True)
@@ -61,6 +83,25 @@ class RuntimeConfig:
     caption_model_name: str
     translation_model_name: str
     compute_device: str
+    query_rewrite_enabled: bool
+    query_rewrite_model_path: str
+
+
+@dataclass(frozen=True)
+class QueryRewriteBundle:
+    model: object
+    tokenizer: object
+    model_path: str
+
+
+@dataclass(frozen=True)
+class QueryRewriteResult:
+    original_query: str
+    normalized_ru: str
+    normalized_en: str
+    search_prompt_en: str
+    used_rewriter: bool
+    fallback_reason: str
 
 
 _model_bundle: ModelBundle | None = None
@@ -69,6 +110,8 @@ _caption_bundle: CaptionBundle | None = None
 _caption_lock = Lock()
 _translation_bundle: TranslationBundle | None = None
 _translation_lock = Lock()
+_query_rewrite_bundle: QueryRewriteBundle | None = None
+_query_rewrite_lock = Lock()
 _runtime_status = RuntimeStatus(
     state="idle",
     summary="OpenCLIP не загружен",
@@ -81,6 +124,8 @@ _runtime_config = RuntimeConfig(
     caption_model_name=DEFAULT_CAPTION_MODEL_NAME,
     translation_model_name=DEFAULT_TRANSLATION_MODEL_NAME,
     compute_device=DEFAULT_COMPUTE_DEVICE,
+    query_rewrite_enabled=DEFAULT_QUERY_REWRITE_ENABLED,
+    query_rewrite_model_path=DEFAULT_QUERY_REWRITE_MODEL_PATH,
 )
 
 
@@ -106,12 +151,18 @@ def _normalize_runtime_config(config: dict[str, str] | None) -> RuntimeConfig:
     if compute_device not in {"auto", "cuda", "mps", "cpu"}:
         compute_device = DEFAULT_COMPUTE_DEVICE
 
+    query_rewrite_enabled = (str(source.get("bEnableQueryRewrite", DEFAULT_QUERY_REWRITE_ENABLED)).strip().lower()
+        in {"1", "true", "yes", "on"})
     model_name = str(source.get("sOpenClipModelName", DEFAULT_MODEL_NAME)).strip() or DEFAULT_MODEL_NAME
     pretrained_tag = str(source.get("sOpenClipPretrained", DEFAULT_PRETRAINED_TAG)).strip() or DEFAULT_PRETRAINED_TAG
     caption_model_name = str(source.get("sCaptionModelName", DEFAULT_CAPTION_MODEL_NAME)).strip() or DEFAULT_CAPTION_MODEL_NAME
     translation_model_name = (
         str(source.get("sTranslationModelName", DEFAULT_TRANSLATION_MODEL_NAME)).strip()
         or DEFAULT_TRANSLATION_MODEL_NAME
+    )
+    query_rewrite_model_path = (
+        str(source.get("sQueryRewriteModelPath", DEFAULT_QUERY_REWRITE_MODEL_PATH)).strip()
+        or DEFAULT_QUERY_REWRITE_MODEL_PATH
     )
 
     return RuntimeConfig(
@@ -120,15 +171,18 @@ def _normalize_runtime_config(config: dict[str, str] | None) -> RuntimeConfig:
         caption_model_name=_resolve_project_path(caption_model_name),
         translation_model_name=_resolve_project_path(translation_model_name),
         compute_device=compute_device,
+        query_rewrite_enabled=query_rewrite_enabled,
+        query_rewrite_model_path=_resolve_project_path(query_rewrite_model_path),
     )
 
 
 def _reset_runtime_state(reason: str) -> None:
-    global _model_bundle, _caption_bundle, _translation_bundle, _runtime_status
+    global _model_bundle, _caption_bundle, _translation_bundle, _query_rewrite_bundle, _runtime_status
 
     _model_bundle = None
     _caption_bundle = None
     _translation_bundle = None
+    _query_rewrite_bundle = None
     _runtime_status = RuntimeStatus(
         state="idle",
         summary="AI runtime перенастроен",
@@ -141,7 +195,7 @@ def configure_runtime(config: dict[str, str] | None = None) -> dict[str, str]:
     global _runtime_config
 
     normalized_config = _normalize_runtime_config(config)
-    with _model_lock, _caption_lock, _translation_lock:
+    with _model_lock, _caption_lock, _translation_lock, _query_rewrite_lock:
         if normalized_config != _runtime_config:
             _runtime_config = normalized_config
             _reset_runtime_state("Изменились параметры модели или устройства вычислений.")
@@ -275,6 +329,32 @@ def _load_translation_bundle() -> TranslationBundle:
         return _translation_bundle
 
 
+def _load_query_rewrite_bundle() -> QueryRewriteBundle:
+    global _query_rewrite_bundle
+
+    with _query_rewrite_lock:
+        if _query_rewrite_bundle is not None:
+            return _query_rewrite_bundle
+
+        if not _runtime_config.query_rewrite_enabled:
+            raise RuntimeError("Query rewriter отключён в конфиге.")
+
+        try:
+            from mlx_lm import load
+        except ImportError as exc:
+            raise RuntimeError("MLX query rewriter зависимости не установлены.") from exc
+
+        model_path = _runtime_config.query_rewrite_model_path
+        if not model_path:
+            raise RuntimeError("В CoreAI.config не указан путь к query rewrite модели.")
+        if not Path(model_path).exists():
+            raise RuntimeError(f"Не найдена query rewrite модель: {model_path}")
+
+        model, tokenizer = load(model_path)
+        _query_rewrite_bundle = QueryRewriteBundle(model=model, tokenizer=tokenizer, model_path=model_path)
+        return _query_rewrite_bundle
+
+
 def normalize_english_text(text: str) -> str:
     normalized = text.strip().lower()
     normalized = re.sub(r"\s+", " ", normalized)
@@ -306,6 +386,27 @@ def get_engine_metadata() -> dict[str, str | int]:
 
 
 def get_runtime_status() -> dict[str, str]:
+    return asdict(_runtime_status)
+
+
+def warm_runtime() -> dict[str, str]:
+    global _runtime_status
+
+    bundle = _load_model_bundle()
+    rewrite_details = "query rewrite: disabled"
+    if _runtime_config.query_rewrite_enabled:
+        try:
+            rewrite_bundle = _load_query_rewrite_bundle()
+            rewrite_details = f"query rewrite: {Path(rewrite_bundle.model_path).name}"
+        except Exception as exc:
+            rewrite_details = f"query rewrite fallback: {exc}"
+
+    _runtime_status = RuntimeStatus(
+        state="ready",
+        summary="AI retrieval активен",
+        details=f"{_runtime_config.model_name} / {_runtime_config.pretrained_tag} / {bundle.device} / {rewrite_details}",
+        reason="Embedding pipeline и query rewrite runtime готовы к поисковым запросам.",
+    )
     return asdict(_runtime_status)
 
 
@@ -343,7 +444,22 @@ def create_text_embedding(query: str) -> dict[str, object]:
 
     bundle = _load_model_bundle()
     tokenizer = open_clip.get_tokenizer(_runtime_config.model_name)
-    tokens = tokenizer([normalized_query]).to(bundle.device)
+    if hasattr(tokenizer, "tokenizer") and hasattr(tokenizer.tokenizer, "__call__"):
+        context_length = getattr(tokenizer, "context_length", None) or 64
+        encoded = tokenizer.tokenizer(
+            [normalized_query],
+            return_tensors="pt",
+            max_length=context_length,
+            padding="max_length",
+            truncation=True,
+        )
+        tokens = encoded.input_ids
+        sep_token_id = getattr(tokenizer.tokenizer, "sep_token_id", None)
+        if getattr(tokenizer, "strip_sep_token", False) and sep_token_id is not None:
+            tokens = torch.where(tokens == sep_token_id, torch.zeros_like(tokens), tokens)
+        tokens = tokens.to(bundle.device)
+    else:
+        tokens = tokenizer([normalized_query]).to(bundle.device)
 
     with torch.no_grad():
         text_features = bundle.model.encode_text(tokens)
@@ -404,6 +520,106 @@ def translate_text_to_english(text: str) -> str:
     if not translated:
         raise RuntimeError("Не удалось перевести запрос на английский.")
     return normalize_english_text(translated)
+
+
+def _extract_json_object(raw_text: str) -> dict[str, str]:
+    stripped = raw_text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        stripped = stripped.replace("json\n", "", 1).strip()
+
+    match = JSON_OBJECT_PATTERN.search(stripped)
+    if not match:
+        raise ValueError("LLM не вернула JSON-объект.")
+
+    payload = json.loads(match.group(0))
+    if not isinstance(payload, dict):
+        raise ValueError("LLM вернула не JSON-объект.")
+    return {str(key): str(value).strip() for key, value in payload.items()}
+
+
+def rewrite_search_query(query: str) -> dict[str, str | bool]:
+    normalized_query = query.strip()
+    if not normalized_query:
+        raise ValueError("Текстовый запрос не должен быть пустым.")
+
+    if not any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in normalized_query):
+        normalized_en = normalize_english_text(normalized_query)
+        result = QueryRewriteResult(
+            original_query=normalized_query,
+            normalized_ru=normalized_query,
+            normalized_en=normalized_en,
+            search_prompt_en=normalized_en,
+            used_rewriter=False,
+            fallback_reason="Запрос уже на английском или без кириллицы.",
+        )
+        return asdict(result)
+
+    if not _runtime_config.query_rewrite_enabled:
+        translated = translate_text_to_english(normalized_query)
+        result = QueryRewriteResult(
+            original_query=normalized_query,
+            normalized_ru=normalized_query,
+            normalized_en=translated,
+            search_prompt_en=translated,
+            used_rewriter=False,
+            fallback_reason="Query rewriter отключён; использован обычный перевод.",
+        )
+        return asdict(result)
+
+    try:
+        from mlx_lm import generate
+    except ImportError:
+        translated = translate_text_to_english(normalized_query)
+        result = QueryRewriteResult(
+            original_query=normalized_query,
+            normalized_ru=normalized_query,
+            normalized_en=translated,
+            search_prompt_en=translated,
+            used_rewriter=False,
+            fallback_reason="MLX query rewriter недоступен; использован обычный перевод.",
+        )
+        return asdict(result)
+
+    try:
+        bundle = _load_query_rewrite_bundle()
+        prompt = bundle.tokenizer.apply_chat_template(
+            [
+                {"role": "system", "content": QUERY_REWRITE_SYSTEM_PROMPT},
+                {"role": "user", "content": normalized_query},
+            ],
+            add_generation_prompt=True,
+        )
+        raw_output = generate(bundle.model, bundle.tokenizer, prompt=prompt, verbose=False, max_tokens=120)
+        payload = _extract_json_object(raw_output)
+
+        normalized_ru = payload.get("normalized_ru", "").strip() or normalized_query
+        normalized_en = normalize_english_text(payload.get("normalized_en", "").strip())
+        search_prompt_en = normalize_english_text(payload.get("search_prompt_en", "").strip())
+
+        if not normalized_en or not search_prompt_en:
+            raise ValueError("LLM вернула пустые english-поля.")
+
+        result = QueryRewriteResult(
+            original_query=normalized_query,
+            normalized_ru=normalized_ru,
+            normalized_en=normalized_en,
+            search_prompt_en=search_prompt_en,
+            used_rewriter=True,
+            fallback_reason="",
+        )
+        return asdict(result)
+    except Exception as exc:
+        translated = translate_text_to_english(normalized_query)
+        result = QueryRewriteResult(
+            original_query=normalized_query,
+            normalized_ru=normalized_query,
+            normalized_en=translated,
+            search_prompt_en=translated,
+            used_rewriter=False,
+            fallback_reason=str(exc),
+        )
+        return asdict(result)
 
 
 def create_photo_index(file_obj: BinaryIO) -> dict[str, object]:
