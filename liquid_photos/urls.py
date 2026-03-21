@@ -13,6 +13,9 @@ from web.views import (
     auth_me,
     auth_register,
     index,
+    people_list,
+    person_photos,
+    person_rename,
     photo_delete,
     photo_list,
     photo_search,
@@ -32,6 +35,9 @@ urlpatterns = [
     path("api/photos/search", photo_search, name="photo-search"),
     path("api/photos/upload", photo_upload, name="photo-upload"),
     path("api/photos/<int:photo_id>/delete", photo_delete, name="photo-delete"),
+    path("api/people", people_list, name="people-list"),
+    path("api/people/<int:person_id>/photos", person_photos, name="person-photos"),
+    path("api/people/<int:person_id>/rename", person_rename, name="person-rename"),
 ]
 
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

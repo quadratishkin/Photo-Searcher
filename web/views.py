@@ -21,7 +21,8 @@ from photo_ai import (
     rewrite_search_query,
     translate_text_to_english,
 )
-from web.models import Photo
+from web.models import Person, Photo
+from web.people import clear_photo_faces, cluster_user_faces, index_photo_faces, list_people_for_user, list_person_photos
 
 
 User = get_user_model()
@@ -189,6 +190,74 @@ def photo_list(request: HttpRequest) -> JsonResponse:
 
     photos = [serialize_photo(photo) for photo in Photo.objects.filter(user=request.user)]
     return JsonResponse({"photos": photos})
+
+
+@require_GET
+def people_list(request: HttpRequest) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    people = list_people_for_user(request.user)
+    message = ""
+    if not people:
+        if Photo.objects.filter(user=request.user).exists():
+            message = "Лица ещё не сгруппированы. Загрузите фото с лицами или выполните переиндексацию людей."
+        else:
+            message = "Загрузите фотографии, чтобы система могла найти и сгруппировать людей."
+
+    return JsonResponse({"people": people, "message": message})
+
+
+@require_GET
+def person_photos(request: HttpRequest, person_id: int) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    try:
+        person = Person.objects.get(id=person_id, user=request.user)
+    except Person.DoesNotExist:
+        return JsonResponse({"message": "Человек не найден."}, status=404)
+
+    photos = list_person_photos(person)
+    return JsonResponse(
+        {
+            "person": {
+                "id": person.id,
+                "displayName": person.display_name,
+            },
+            "photos": photos,
+        }
+    )
+
+
+@require_POST
+def person_rename(request: HttpRequest, person_id: int) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    try:
+        person = Person.objects.get(id=person_id, user=request.user)
+    except Person.DoesNotExist:
+        return JsonResponse({"message": "Человек не найден."}, status=404)
+
+    payload = parse_json_body(request)
+    display_name = str(payload.get("displayName", "")).strip()
+    if len(display_name) > 120:
+        return JsonResponse({"message": "Имя человека должно быть не длиннее 120 символов."}, status=400)
+
+    person.display_name = display_name
+    person.save(update_fields=["display_name", "updated_at"])
+    return JsonResponse(
+        {
+            "person": {
+                "id": person.id,
+                "displayName": person.display_name,
+            }
+        }
+    )
 
 
 @require_POST
@@ -381,6 +450,7 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
         )
 
     created_photos: list[Photo] = []
+    face_index_warning = ""
     with transaction.atomic():
         for uploaded_file, photo_index in indexed_uploads:
             embedding_result = photo_index["embedding"]
@@ -404,10 +474,27 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
             photo.image.save(uploaded_file.name, uploaded_file, save=False)
             photo.save()
             created_photos.append(photo)
+            try:
+                uploaded_file.seek(0)
+                index_photo_faces(photo, uploaded_file)
+            except Exception as exc:
+                if not face_index_warning:
+                    face_index_warning = f"Группировка лиц временно недоступна: {exc}"
 
+    cluster_error = ""
+    try:
+        cluster_user_faces(request.user)
+    except Exception as exc:
+        cluster_error = f"Не удалось обновить группы людей: {exc}"
+
+    response_message = f"Загружено {len(created_photos)} фото."
+    if face_index_warning:
+        response_message = f"{response_message} {face_index_warning}"
+    elif cluster_error:
+        response_message = f"{response_message} {cluster_error}"
     return JsonResponse(
         {
-            "message": f"Загружено {len(created_photos)} фото.",
+            "message": response_message,
             "photos": [serialize_photo(photo) for photo in created_photos],
         },
         status=201,
@@ -425,6 +512,11 @@ def photo_delete(request: HttpRequest, photo_id: int) -> JsonResponse:
     except Photo.DoesNotExist:
         return JsonResponse({"message": "Фотография не найдена."}, status=404)
 
+    clear_photo_faces(photo)
     photo.image.delete(save=False)
     photo.delete()
+    try:
+        cluster_user_faces(request.user)
+    except Exception:
+        pass
     return JsonResponse({"message": "Фотография удалена.", "photoId": photo_id})

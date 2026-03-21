@@ -15,6 +15,15 @@ type SearchResultItem = PhotoItem & {
   scorePercent: number;
 };
 
+type PersonItem = {
+  id: number;
+  displayName: string;
+  fallbackName: string;
+  previewUrl: string;
+  faceCount: number;
+  photoCount: number;
+};
+
 type AuthUser = {
   id: number;
   username: string;
@@ -47,6 +56,37 @@ type PhotoUploadResponse = {
 type PhotoDeleteResponse = {
   message?: string;
   photoId?: number;
+};
+
+type PersonApiItem = {
+  id: number;
+  displayName: string;
+  fallbackName: string;
+  previewUrl: string;
+  faceCount: number;
+  photoCount: number;
+};
+
+type PeopleListResponse = {
+  people: PersonApiItem[];
+  message?: string;
+};
+
+type PersonPhotosResponse = {
+  person: {
+    id: number;
+    displayName: string;
+  };
+  photos: PhotoApiItem[];
+  message?: string;
+};
+
+type PersonRenameResponse = {
+  person?: {
+    id: number;
+    displayName: string;
+  };
+  message?: string;
 };
 
 type AiStatusResponse = {
@@ -117,6 +157,15 @@ function App() {
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchMessage, setSearchMessage] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [people, setPeople] = useState<PersonItem[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleMessage, setPeopleMessage] = useState('');
+  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  const [personPhotos, setPersonPhotos] = useState<PhotoItem[]>([]);
+  const [personPhotosLoading, setPersonPhotosLoading] = useState(false);
+  const [personPhotosMessage, setPersonPhotosMessage] = useState('');
+  const [personRenameDraft, setPersonRenameDraft] = useState('');
+  const [personRenamePending, setPersonRenamePending] = useState(false);
   const [uploadPending, setUploadPending] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -143,10 +192,17 @@ function App() {
       setSearchResults([]);
       setSearchMessage('');
       setHasSearched(false);
+      setPeople([]);
+      setPeopleMessage('');
+      setSelectedPersonId(null);
+      setPersonPhotos([]);
+      setPersonPhotosMessage('');
+      setPersonRenameDraft('');
       return;
     }
 
     void loadPhotos();
+    void loadPeople();
   }, [user]);
 
   useEffect(() => {
@@ -188,6 +244,21 @@ function App() {
       window.removeEventListener('scroll', closePhotoMenu, true);
     };
   }, [photoMenu]);
+
+  useEffect(() => {
+    if (!user || selectedPersonId === null) {
+      setPersonPhotos([]);
+      setPersonPhotosMessage('');
+      return;
+    }
+
+    void loadPersonPhotos(selectedPersonId);
+  }, [selectedPersonId, user]);
+
+  useEffect(() => {
+    const selectedPerson = people.find((person) => person.id === selectedPersonId) ?? null;
+    setPersonRenameDraft(selectedPerson?.displayName ?? '');
+  }, [people, selectedPersonId]);
 
   async function loadCurrentUser() {
     try {
@@ -251,6 +322,17 @@ function App() {
     };
   }
 
+  function mapPerson(item: PersonApiItem): PersonItem {
+    return {
+      id: item.id,
+      displayName: item.displayName,
+      fallbackName: item.fallbackName,
+      previewUrl: item.previewUrl,
+      faceCount: item.faceCount,
+      photoCount: item.photoCount,
+    };
+  }
+
   async function loadPhotos() {
     setPhotosLoading(true);
     try {
@@ -264,6 +346,58 @@ function App() {
       setPhotos((data.photos ?? []).map(mapPhoto));
     } finally {
       setPhotosLoading(false);
+    }
+  }
+
+  async function loadPeople() {
+    setPeopleLoading(true);
+    try {
+      const response = await fetch('/api/people');
+      const data = await readJsonSafely<PeopleListResponse>(response);
+      if (!response.ok || !data) {
+        setPeople([]);
+        setPeopleMessage(data?.message ?? 'Не удалось загрузить список людей.');
+        setSelectedPersonId(null);
+        return;
+      }
+
+      const mappedPeople = (data.people ?? []).map(mapPerson);
+      setPeople(mappedPeople);
+      setPeopleMessage(data.message ?? '');
+      setSelectedPersonId((current) => {
+        if (current !== null && mappedPeople.some((person) => person.id === current)) {
+          return current;
+        }
+        return mappedPeople[0]?.id ?? null;
+      });
+    } catch {
+      setPeople([]);
+      setPeopleMessage('Не удалось связаться с API людей.');
+      setSelectedPersonId(null);
+    } finally {
+      setPeopleLoading(false);
+    }
+  }
+
+  async function loadPersonPhotos(personId: number) {
+    setPersonPhotosLoading(true);
+    try {
+      const response = await fetch(`/api/people/${personId}/photos`);
+      const data = await readJsonSafely<PersonPhotosResponse>(response);
+      if (!response.ok || !data) {
+        setPersonPhotos([]);
+        setPersonPhotosMessage(data?.message ?? 'Не удалось загрузить фотографии этого человека.');
+        return;
+      }
+
+      const mappedPhotos = (data.photos ?? []).map(mapPhoto);
+      setPersonPhotos(mappedPhotos);
+      setPersonPhotosMessage(data.message ?? (mappedPhotos.length === 0 ? 'У этого человека пока нет фотографий.' : ''));
+    } catch {
+      setPersonPhotos([]);
+      setPersonPhotosMessage('Не удалось связаться с API фотографий по человеку.');
+    } finally {
+      setPersonPhotosLoading(false);
     }
   }
 
@@ -323,6 +457,12 @@ function App() {
     setAuthMessage('');
     setUserMenuOpen(false);
     setPhotos([]);
+    setPeople([]);
+    setPeopleMessage('');
+    setSelectedPersonId(null);
+    setPersonPhotos([]);
+    setPersonPhotosMessage('');
+    setPersonRenameDraft('');
     setPhotoMenu(null);
   }
 
@@ -377,6 +517,7 @@ function App() {
       }
 
       await loadPhotos();
+      await loadPeople();
       showToast(data?.message ?? `Загружено ${files.length} фото.`);
       setActiveTab('library');
     } catch {
@@ -404,9 +545,45 @@ function App() {
       }
 
       setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      await loadPeople();
       showToast(data?.message ?? 'Фотография удалена.');
     } catch {
       showToast('Не удалось удалить фотографию. Проверьте соединение с сервером.');
+    }
+  }
+
+  async function savePersonName() {
+    if (selectedPersonId === null) {
+      return;
+    }
+
+    setPersonRenamePending(true);
+    try {
+      const response = await fetch(`/api/people/${selectedPersonId}/rename`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ displayName: personRenameDraft.trim() }),
+      });
+
+      const data = await readJsonSafely<PersonRenameResponse>(response);
+      if (!response.ok) {
+        showToast(data?.message ?? 'Не удалось сохранить имя человека.');
+        return;
+      }
+
+      const nextName = data?.person?.displayName ?? personRenameDraft.trim();
+      setPeople((current) =>
+        current.map((person) => (person.id === selectedPersonId ? { ...person, displayName: nextName } : person))
+      );
+      setPersonRenameDraft(nextName);
+      showToast(nextName ? 'Имя человека сохранено.' : 'Имя очищено.');
+    } catch {
+      showToast('Не удалось сохранить имя человека. Проверьте соединение с сервером.');
+    } finally {
+      setPersonRenamePending(false);
     }
   }
 
@@ -523,11 +700,7 @@ function App() {
             </button>
 
             {userMenuOpen && (
-              <button
-                className="logout-dropdown-button"
-                type="button"
-                onClick={() => void handleLogout()}
-              >
+              <button className="logout-dropdown-button" type="button" onClick={() => void handleLogout()}>
                 Выйти из аккаунта
               </button>
             )}
@@ -582,7 +755,23 @@ function App() {
             onSubmit={submitSemanticSearch}
           />
         )}
-        {activeTab === 'people' && <PeopleView aiStatus={aiStatus} />}
+        {activeTab === 'people' && (
+          <PeopleView
+            aiStatus={aiStatus}
+            people={people}
+            loading={peopleLoading}
+            message={peopleMessage}
+            selectedPersonId={selectedPersonId}
+            onSelectPerson={setSelectedPersonId}
+            selectedPersonPhotos={personPhotos}
+            selectedPersonPhotosLoading={personPhotosLoading}
+            selectedPersonPhotosMessage={personPhotosMessage}
+            personRenameDraft={personRenameDraft}
+            personRenamePending={personRenamePending}
+            onRenameDraftChange={setPersonRenameDraft}
+            onRenameSave={savePersonName}
+          />
+        )}
       </main>
 
       {photoMenu && (
@@ -602,11 +791,7 @@ function App() {
       <nav className="tabbar" aria-label="Primary">
         <div className={`tab-highlight ${activeTab}`} />
         {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
+          <button key={tab.id} className={`tab-button ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
             {tab.label}
           </button>
         ))}
@@ -659,10 +844,7 @@ function AuthScreen({
             <button className={`auth-mode-button ${mode === 'login' ? 'active' : ''}`} onClick={() => onModeChange('login')}>
               Вход
             </button>
-            <button
-              className={`auth-mode-button ${mode === 'register' ? 'active' : ''}`}
-              onClick={() => onModeChange('register')}
-            >
+            <button className={`auth-mode-button ${mode === 'register' ? 'active' : ''}`} onClick={() => onModeChange('register')}>
               Регистрация
             </button>
           </div>
@@ -822,23 +1004,13 @@ function SearchView({
           <div className="search-toolbar">
             <div className="search-suggestions-inline">
               {['закат у моря', 'человек с собакой', 'ночной город'].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className="glass-chip compact search-suggestion-chip"
-                  onClick={() => setSearchQuery(item)}
-                >
+                <button key={item} type="button" className="glass-chip compact search-suggestion-chip" onClick={() => setSearchQuery(item)}>
                   {item}
                 </button>
               ))}
             </div>
 
-            <button
-              type="submit"
-              className="search-submit-button"
-              aria-label="Запустить поиск"
-              disabled={!isSearchReady || pending}
-            >
+            <button type="submit" className="search-submit-button" aria-label="Запустить поиск" disabled={!isSearchReady || pending}>
               {pending ? 'Ищем...' : 'Найти'}
             </button>
           </div>
@@ -884,23 +1056,166 @@ function SearchView({
   );
 }
 
-function PeopleView({ aiStatus }: { aiStatus: AiStatusResponse }) {
+function PeopleView({
+  aiStatus,
+  people,
+  loading,
+  message,
+  selectedPersonId,
+  onSelectPerson,
+  selectedPersonPhotos,
+  selectedPersonPhotosLoading,
+  selectedPersonPhotosMessage,
+  personRenameDraft,
+  personRenamePending,
+  onRenameDraftChange,
+  onRenameSave,
+}: {
+  aiStatus: AiStatusResponse;
+  people: PersonItem[];
+  loading: boolean;
+  message: string;
+  selectedPersonId: number | null;
+  onSelectPerson: (personId: number) => void;
+  selectedPersonPhotos: PhotoItem[];
+  selectedPersonPhotosLoading: boolean;
+  selectedPersonPhotosMessage: string;
+  personRenameDraft: string;
+  personRenamePending: boolean;
+  onRenameDraftChange: (value: string) => void;
+  onRenameSave: () => void;
+}) {
+  const selectedPerson = people.find((person) => person.id === selectedPersonId) ?? null;
   const isAiUnavailable = !aiStatus.enabled;
 
-  return (
-    <section className="panel-view">
+  if (loading) {
+    return (
+      <section className="library-empty-state people-empty-state">
+        <div className="library-empty-card">
+          <h2>Ищем людей...</h2>
+          <p>Собираем сгруппированные лица и фотографии из вашей медиатеки.</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (people.length === 0) {
+    return (
       <section className="library-empty-state people-empty-state">
         <div className="library-empty-card feature-status-card">
-          <span className="feature-status-eyebrow">Люди временно недоступны</span>
-          <h2>{isAiUnavailable ? 'Поиск по людям отключён' : 'Распознавание людей ещё не подключено'}</h2>
+          <span className="feature-status-eyebrow">Люди</span>
+          <h2>{isAiUnavailable ? 'AI-модуль отключён' : 'Лица пока не найдены'}</h2>
           <p>
-            {isAiUnavailable
-              ? 'Вкладка с людьми не может показать найденные лица, потому что AI-модуль отключён в конфиге проекта.'
-              : 'Дизайн вкладки уже готов, но реальные данные и группировка людей появятся после подключения AI-пайплайна.'}
+            {message ||
+              (isAiUnavailable
+                ? 'Группировка лиц недоступна, пока AI-модуль не активен в конфигурации проекта.'
+                : 'Загрузите фотографии с крупными лицами или выполните переиндексацию людей для уже существующих фото.')}
           </p>
           <strong>{aiStatus.details}</strong>
         </div>
       </section>
+    );
+  }
+
+  return (
+    <section className="people-stage">
+      {message && <div className="search-feedback-card">{message}</div>}
+
+      <div className="people-layout">
+        <section className="people-sidebar">
+          <div className="people-grid" role="list" aria-label="Группы людей">
+            {people.map((person) => {
+              const title = person.displayName || person.fallbackName;
+              return (
+                <button
+                  key={person.id}
+                  type="button"
+                  className={`person-tile ${selectedPersonId === person.id ? 'active' : ''}`}
+                  onClick={() => onSelectPerson(person.id)}
+                >
+                  <div className="person-portrait-shell">
+                    {person.previewUrl ? (
+                      <img className="person-portrait" src={person.previewUrl} alt={title} />
+                    ) : (
+                      <div className="person-portrait person-portrait-placeholder">{title.slice(0, 1)}</div>
+                    )}
+                  </div>
+                  <h3>{title}</h3>
+                  <span className="person-count">
+                    {person.photoCount} фото, {person.faceCount} лиц
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="people-detail-card">
+          {selectedPerson && (
+            <>
+              <div className="people-detail-header">
+                <div>
+                  <span className="feature-status-eyebrow">Карточка человека</span>
+                  <h2>{selectedPerson.displayName || selectedPerson.fallbackName}</h2>
+                  <p>
+                    Система объединила {selectedPerson.faceCount} найденных лиц в {selectedPerson.photoCount} фотографиях.
+                  </p>
+                </div>
+                {selectedPerson.previewUrl ? (
+                  <img className="people-detail-preview" src={selectedPerson.previewUrl} alt={selectedPerson.displayName || selectedPerson.fallbackName} />
+                ) : (
+                  <div className="people-detail-preview people-detail-preview-placeholder">
+                    {(selectedPerson.displayName || selectedPerson.fallbackName).slice(0, 1)}
+                  </div>
+                )}
+              </div>
+
+              <form
+                className="person-rename-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void onRenameSave();
+                }}
+              >
+                <label className="person-rename-field">
+                  <span>Имя человека</span>
+                  <input
+                    value={personRenameDraft}
+                    onChange={(event) => onRenameDraftChange(event.target.value)}
+                    placeholder={selectedPerson.fallbackName}
+                    maxLength={120}
+                  />
+                </label>
+                <button className="auth-submit-button person-rename-submit" type="submit" disabled={personRenamePending}>
+                  {personRenamePending ? 'Сохраняем...' : 'Сохранить имя'}
+                </button>
+              </form>
+
+              {selectedPersonPhotosLoading && (
+                <div className="search-feedback-card search-feedback-muted">Загружаем фотографии этого человека...</div>
+              )}
+
+              {!selectedPersonPhotosLoading && selectedPersonPhotosMessage && (
+                <div className="search-feedback-card">{selectedPersonPhotosMessage}</div>
+              )}
+
+              {!selectedPersonPhotosLoading && selectedPersonPhotos.length > 0 && (
+                <div className="people-photo-grid">
+                  {selectedPersonPhotos.map((photo) => (
+                    <article key={photo.id} className="people-photo-card">
+                      <img src={photo.src} alt={photo.originalFilename} />
+                      <div className="photo-overlay" />
+                      <div className="search-result-meta">
+                        <strong>{photo.originalFilename}</strong>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
     </section>
   );
 }

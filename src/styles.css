@@ -831,11 +831,60 @@ button {
   margin-top: 1.5rem;
 }
 
+.people-stage {
+  display: grid;
+  gap: 1.25rem;
+  padding-bottom: 8rem;
+}
+
+.people-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.people-sidebar,
+.people-detail-card {
+  padding: 1.2rem;
+  border-radius: 1.6rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+
+.people-sidebar .people-grid {
+  margin-top: 0;
+}
+
 .person-tile {
   display: grid;
   justify-items: center;
   text-align: center;
   gap: 0.5rem;
+  width: 100%;
+  padding: 0.85rem 0.7rem;
+  border-radius: 1.3rem;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.person-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.person-tile.active {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .person-tile h3 {
@@ -865,9 +914,118 @@ button {
   display: block;
 }
 
+.person-portrait-placeholder,
+.people-detail-preview-placeholder {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 244, 213, 0.48), transparent 45%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 2rem;
+  font-weight: 700;
+}
+
 .person-count {
   color: rgba(255, 255, 255, 0.68);
   font-size: 0.95rem;
+}
+
+.people-detail-card {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.people-detail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  gap: 1rem;
+  align-items: center;
+}
+
+.people-detail-header h2 {
+  margin: 0.25rem 0 0.35rem;
+  font-size: clamp(1.45rem, 2vw, 2rem);
+}
+
+.people-detail-header p {
+  margin: 0;
+  color: rgba(240, 244, 255, 0.76);
+}
+
+.people-detail-preview {
+  width: 7rem;
+  height: 7rem;
+  object-fit: cover;
+  border-radius: 1.5rem;
+  box-shadow: var(--glass-shadow);
+}
+
+.person-rename-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.person-rename-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.person-rename-field span {
+  color: rgba(240, 244, 255, 0.72);
+  font-size: 0.88rem;
+}
+
+.person-rename-field input {
+  min-height: 3.3rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  color: #fff;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.person-rename-field input::placeholder {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.person-rename-submit {
+  min-width: 11rem;
+}
+
+.people-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.people-photo-card {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 18px 30px rgba(0, 0, 0, 0.26);
+}
+
+.people-photo-card img,
+.people-photo-card .search-result-meta {
+  position: absolute;
+}
+
+.people-photo-card img {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .people-empty-state {
@@ -1245,6 +1403,38 @@ button {
   }
 
   .people-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .people-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .people-sidebar,
+  .people-detail-card {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .people-detail-header {
+    grid-template-columns: minmax(0, 1fr) 5.4rem;
+  }
+
+  .people-detail-preview {
+    width: 5.4rem;
+    height: 5.4rem;
+    border-radius: 1.1rem;
+  }
+
+  .person-rename-form {
+    grid-template-columns: 1fr;
+  }
+
+  .person-rename-submit {
+    min-width: 0;
+  }
+
+  .people-photo-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
