@@ -25,6 +25,11 @@ class Photo(models.Model):
     mime_type = models.CharField(max_length=120, blank=True)
     file_size_bytes = models.PositiveBigIntegerField(default=0)
     processing_status = models.CharField(max_length=32, default="uploaded")
+    embedding_model = models.CharField(max_length=80, blank=True)
+    embedding_pretrained_tag = models.CharField(max_length=120, blank=True)
+    embedding_dimension = models.PositiveIntegerField(default=0)
+    embedding_vector = models.JSONField(default=list, blank=True)
+    embedding_created_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

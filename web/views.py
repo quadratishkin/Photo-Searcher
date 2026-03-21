@@ -5,12 +5,13 @@ from pathlib import Path
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
+from django.utils import timezone
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from photo_ai import get_ai_module_status
+from photo_ai import create_image_embedding, get_ai_module_status
 from web.models import Photo
 
 
@@ -41,6 +42,9 @@ def serialize_photo(photo: Photo) -> dict:
         "fileSizeBytes": photo.file_size_bytes,
         "mimeType": photo.mime_type,
         "processingStatus": photo.processing_status,
+        "hasEmbedding": bool(photo.embedding_dimension and photo.embedding_vector),
+        "embeddingDimension": photo.embedding_dimension,
+        "embeddingModel": photo.embedding_model,
         "createdAt": photo.created_at.isoformat(),
     }
 
@@ -141,15 +145,34 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
             status=400,
         )
 
+    embedding_payloads: list[tuple] = []
+    try:
+        for uploaded_file in uploaded_files:
+            uploaded_file.seek(0)
+            embedding_result = create_image_embedding(uploaded_file)
+            uploaded_file.seek(0)
+            embedding_payloads.append((uploaded_file, embedding_result))
+    except Exception as exc:
+        return JsonResponse(
+            {"message": f"Не удалось построить AI-эмбеддинги для загружаемых фото: {exc}"},
+            status=500,
+        )
+
     created_photos: list[Photo] = []
     with transaction.atomic():
-        for uploaded_file in uploaded_files:
+        for uploaded_file, embedding_result in embedding_payloads:
             photo = Photo(
                 user=request.user,
                 original_filename=uploaded_file.name,
                 file_extension=Path(uploaded_file.name).suffix.lower(),
                 mime_type=getattr(uploaded_file, "content_type", "") or "",
                 file_size_bytes=uploaded_file.size,
+                processing_status="embedded",
+                embedding_model=str(embedding_result["model_name"]),
+                embedding_pretrained_tag=str(embedding_result["pretrained_tag"]),
+                embedding_dimension=int(embedding_result["dimension"]),
+                embedding_vector=list(embedding_result["vector"]),
+                embedding_created_at=timezone.now(),
             )
             photo.image.save(uploaded_file.name, uploaded_file, save=False)
             photo.save()
