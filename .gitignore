@@ -10,3 +10,5 @@ db.sqlite3
 __pycache__/
 *.pyc
 Local_DB/
+dev/
+NovaAI-Shipping/models/query-rewriter/
