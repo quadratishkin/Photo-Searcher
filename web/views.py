@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
@@ -12,7 +13,13 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from photo_ai import create_image_embedding, create_text_embedding, get_ai_module_status, get_embedding_engine_metadata
+from photo_ai import (
+    create_photo_index,
+    create_text_embedding,
+    get_ai_module_status,
+    get_embedding_engine_metadata,
+    translate_text_to_english,
+)
 from web.models import Photo
 
 
@@ -20,6 +27,10 @@ User = get_user_model()
 ALPHA_REGISTRATION_CLOSED_MESSAGE = "Регистрация на альфа-тест новых пользователей временно не производится."
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 SEARCH_RESULTS_LIMIT = 10
+CAPTION_SCORE_WEIGHT = 0.35
+EMBEDDING_SCORE_WEIGHT = 0.55
+TOKEN_BONUS_WEIGHT = 0.10
+TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
 def parse_json_body(request: HttpRequest) -> dict:
@@ -47,6 +58,7 @@ def serialize_photo(photo: Photo) -> dict:
         "hasEmbedding": bool(photo.embedding_dimension and photo.embedding_vector),
         "embeddingDimension": photo.embedding_dimension,
         "embeddingModel": photo.embedding_model,
+        "captionEn": photo.caption_en,
         "createdAt": photo.created_at.isoformat(),
     }
 
@@ -71,6 +83,39 @@ def is_valid_embedding_vector(vector: object, dimension: int) -> bool:
 
 def dot_product(left: list[float], right: list[float]) -> float:
     return sum(float(left_item) * float(right_item) for left_item, right_item in zip(left, right, strict=True))
+
+
+def extract_query_tokens(text: str) -> list[str]:
+    tokens = TOKEN_PATTERN.findall(text.strip().lower())
+    unique_tokens: list[str] = []
+    seen_tokens: set[str] = set()
+    for token in tokens:
+        if len(token) <= 1 or token in seen_tokens:
+            continue
+        seen_tokens.add(token)
+        unique_tokens.append(token)
+    return unique_tokens
+
+
+def score_caption_match(query_tokens: list[str], caption_tokens: object) -> tuple[float, float]:
+    if not query_tokens or not isinstance(caption_tokens, list):
+        return 0.0, 0.0
+
+    normalized_caption_tokens = {
+        str(token).strip().lower()
+        for token in caption_tokens
+        if isinstance(token, str) and str(token).strip()
+    }
+    if not normalized_caption_tokens:
+        return 0.0, 0.0
+
+    matched_tokens = [token for token in query_tokens if token in normalized_caption_tokens]
+    if not matched_tokens:
+        return 0.0, 0.0
+
+    match_ratio = len(matched_tokens) / len(query_tokens)
+    token_bonus = min(1.0, len(matched_tokens) / max(3, len(normalized_caption_tokens)))
+    return match_ratio, token_bonus
 
 
 @ensure_csrf_cookie
@@ -167,6 +212,13 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     expected_model_name = str(engine_metadata["model_name"])
     expected_pretrained_tag = str(engine_metadata["pretrained_tag"])
     expected_dimension = int(engine_metadata["embedding_dimension"])
+    try:
+        translated_query = translate_text_to_english(query)
+    except Exception:
+        translated_query = query.strip().lower()
+
+    combined_query_text = f"{query.strip()} {translated_query}".strip()
+    english_query_tokens = extract_query_tokens(translated_query)
 
     indexed_photos = list(
         Photo.objects.filter(user=request.user, embedding_dimension__gt=0)
@@ -183,6 +235,8 @@ def photo_search(request: HttpRequest) -> JsonResponse:
             "embedding_pretrained_tag",
             "embedding_dimension",
             "embedding_vector",
+            "caption_en",
+            "caption_tokens",
         )
     )
     if not indexed_photos:
@@ -196,7 +250,7 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         )
 
     try:
-        text_embedding = create_text_embedding(query)
+        text_embedding = create_text_embedding(combined_query_text)
     except ValueError as exc:
         return JsonResponse({"message": str(exc)}, status=400)
     except Exception as exc:
@@ -206,7 +260,7 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         )
 
     query_vector = list(text_embedding["vector"])
-    search_hits: list[tuple[float, Photo]] = []
+    search_hits: list[tuple[float, Photo, dict[str, float | str]]] = []
     skipped_photos = 0
 
     for photo in indexed_photos:
@@ -224,7 +278,19 @@ def photo_search(request: HttpRequest) -> JsonResponse:
             continue
 
         similarity = dot_product(query_vector, photo.embedding_vector)
-        search_hits.append((similarity, photo))
+        caption_match_ratio, token_bonus = score_caption_match(english_query_tokens, photo.caption_tokens)
+        hybrid_score = (
+            (similarity * EMBEDDING_SCORE_WEIGHT)
+            + (caption_match_ratio * CAPTION_SCORE_WEIGHT)
+            + (token_bonus * TOKEN_BONUS_WEIGHT)
+        )
+        debug_meta = {
+            "embeddingScore": round(similarity, 6),
+            "captionScore": round(caption_match_ratio, 6),
+            "tokenBonus": round(token_bonus, 6),
+            "translatedQuery": translated_query,
+        }
+        search_hits.append((hybrid_score, photo, debug_meta))
 
     if not search_hits:
         return JsonResponse(
@@ -243,7 +309,11 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "query": query,
-            "photos": [serialize_search_hit(photo, score) for score, photo in top_hits],
+            "translatedQuery": translated_query,
+            "photos": [
+                {**serialize_search_hit(photo, score), **debug_meta}
+                for score, photo, debug_meta in top_hits
+            ],
             "topK": SEARCH_RESULTS_LIMIT,
             "totalIndexedPhotos": len(indexed_photos),
             "skippedPhotos": skipped_photos,
@@ -276,34 +346,39 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
             status=400,
         )
 
-    embedding_payloads: list[tuple] = []
+    indexed_uploads: list[tuple] = []
     try:
         for uploaded_file in uploaded_files:
             uploaded_file.seek(0)
-            embedding_result = create_image_embedding(uploaded_file)
+            photo_index = create_photo_index(uploaded_file)
             uploaded_file.seek(0)
-            embedding_payloads.append((uploaded_file, embedding_result))
+            indexed_uploads.append((uploaded_file, photo_index))
     except Exception as exc:
         return JsonResponse(
-            {"message": f"Не удалось построить AI-эмбеддинги для загружаемых фото: {exc}"},
+            {"message": f"Не удалось построить AI-индекс для загружаемых фото: {exc}"},
             status=500,
         )
 
     created_photos: list[Photo] = []
     with transaction.atomic():
-        for uploaded_file, embedding_result in embedding_payloads:
+        for uploaded_file, photo_index in indexed_uploads:
+            embedding_result = photo_index["embedding"]
             photo = Photo(
                 user=request.user,
                 original_filename=uploaded_file.name,
                 file_extension=Path(uploaded_file.name).suffix.lower(),
                 mime_type=getattr(uploaded_file, "content_type", "") or "",
                 file_size_bytes=uploaded_file.size,
-                processing_status="embedded",
+                processing_status="indexed",
                 embedding_model=str(embedding_result["model_name"]),
                 embedding_pretrained_tag=str(embedding_result["pretrained_tag"]),
                 embedding_dimension=int(embedding_result["dimension"]),
                 embedding_vector=list(embedding_result["vector"]),
                 embedding_created_at=timezone.now(),
+                caption_model="Salesforce/blip-image-captioning-base",
+                caption_en=str(photo_index["caption_en"]),
+                caption_tokens=list(photo_index["caption_tokens"]),
+                caption_created_at=timezone.now(),
             )
             photo.image.save(uploaded_file.name, uploaded_file, save=False)
             photo.save()

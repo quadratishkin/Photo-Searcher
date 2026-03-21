@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from threading import Lock
 from typing import BinaryIO
@@ -7,6 +8,9 @@ from typing import BinaryIO
 
 MODEL_NAME = "ViT-B-32"
 PRETRAINED_TAG = "laion2b_s34b_b79k"
+CAPTION_MODEL_NAME = "Salesforce/blip-image-captioning-base"
+TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-ru-en"
+TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -33,8 +37,25 @@ class ModelBundle:
     embedding_dimension: int
 
 
+@dataclass(frozen=True)
+class CaptionBundle:
+    processor: object
+    model: object
+    device: str
+
+
+@dataclass(frozen=True)
+class TranslationBundle:
+    tokenizer: object
+    model: object
+
+
 _model_bundle: ModelBundle | None = None
 _model_lock = Lock()
+_caption_bundle: CaptionBundle | None = None
+_caption_lock = Lock()
+_translation_bundle: TranslationBundle | None = None
+_translation_lock = Lock()
 _runtime_status = RuntimeStatus(
     state="idle",
     summary="OpenCLIP не загружен",
@@ -94,6 +115,70 @@ def _load_model_bundle() -> ModelBundle:
             reason="Image embedding pipeline готов к обработке новых фото.",
         )
         return _model_bundle
+
+
+def _load_caption_bundle() -> CaptionBundle:
+    global _caption_bundle
+
+    with _caption_lock:
+        if _caption_bundle is not None:
+            return _caption_bundle
+
+        try:
+            from transformers import BlipForConditionalGeneration, BlipProcessor
+        except ImportError as exc:
+            raise RuntimeError("BLIP зависимости не установлены.") from exc
+
+        device = _detect_device()
+        processor = BlipProcessor.from_pretrained(CAPTION_MODEL_NAME)
+        model = BlipForConditionalGeneration.from_pretrained(CAPTION_MODEL_NAME).to(device)
+        model.eval()
+
+        _caption_bundle = CaptionBundle(
+            processor=processor,
+            model=model,
+            device=device,
+        )
+        return _caption_bundle
+
+
+def _load_translation_bundle() -> TranslationBundle:
+    global _translation_bundle
+
+    with _translation_lock:
+        if _translation_bundle is not None:
+            return _translation_bundle
+
+        try:
+            from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        except ImportError as exc:
+            raise RuntimeError("Translation зависимости не установлены.") from exc
+
+        tokenizer = AutoTokenizer.from_pretrained(TRANSLATION_MODEL_NAME)
+        model = AutoModelForSeq2SeqLM.from_pretrained(TRANSLATION_MODEL_NAME)
+        model.eval()
+
+        _translation_bundle = TranslationBundle(tokenizer=tokenizer, model=model)
+        return _translation_bundle
+
+
+def normalize_english_text(text: str) -> str:
+    normalized = text.strip().lower()
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized
+
+
+def extract_search_tokens(text: str) -> list[str]:
+    normalized = normalize_english_text(text)
+    tokens = TOKEN_PATTERN.findall(normalized)
+    unique_tokens: list[str] = []
+    seen_tokens: set[str] = set()
+    for token in tokens:
+        if len(token) <= 1 or token in seen_tokens:
+            continue
+        seen_tokens.add(token)
+        unique_tokens.append(token)
+    return unique_tokens
 
 
 def get_engine_metadata() -> dict[str, str | int]:
@@ -158,4 +243,63 @@ def create_text_embedding(query: str) -> dict[str, object]:
         "device": bundle.device,
         "dimension": bundle.embedding_dimension,
         "vector": vector,
+    }
+
+
+def generate_caption(file_obj: BinaryIO) -> str:
+    from PIL import Image
+    import torch
+
+    bundle = _load_caption_bundle()
+
+    image = Image.open(file_obj)
+    image = image.convert("RGB")
+    inputs = bundle.processor(images=image, return_tensors="pt")
+    prepared_inputs = {name: value.to(bundle.device) for name, value in inputs.items()}
+
+    with torch.no_grad():
+        output_tokens = bundle.model.generate(
+            **prepared_inputs,
+            max_new_tokens=32,
+            num_beams=4,
+        )
+
+    caption = bundle.processor.decode(output_tokens[0], skip_special_tokens=True).strip()
+    if not caption:
+        raise RuntimeError("BLIP не смог сгенерировать описание изображения.")
+    return normalize_english_text(caption)
+
+
+def translate_text_to_english(text: str) -> str:
+    import torch
+
+    normalized_text = text.strip()
+    if not normalized_text:
+        raise ValueError("Текст для перевода не должен быть пустым.")
+
+    if not any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in normalized_text):
+        return normalize_english_text(normalized_text)
+
+    bundle = _load_translation_bundle()
+    inputs = bundle.tokenizer(normalized_text, return_tensors="pt", truncation=True)
+
+    with torch.no_grad():
+        output_tokens = bundle.model.generate(**inputs, max_new_tokens=64)
+
+    translated = bundle.tokenizer.decode(output_tokens[0], skip_special_tokens=True).strip()
+    if not translated:
+        raise RuntimeError("Не удалось перевести запрос на английский.")
+    return normalize_english_text(translated)
+
+
+def create_photo_index(file_obj: BinaryIO) -> dict[str, object]:
+    image_embedding = create_image_embedding(file_obj)
+    file_obj.seek(0)
+    caption_en = generate_caption(file_obj)
+    caption_tokens = extract_search_tokens(caption_en)
+
+    return {
+        "embedding": image_embedding,
+        "caption_en": caption_en,
+        "caption_tokens": caption_tokens,
     }

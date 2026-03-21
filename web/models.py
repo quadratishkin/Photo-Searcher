@@ -30,6 +30,10 @@ class Photo(models.Model):
     embedding_dimension = models.PositiveIntegerField(default=0)
     embedding_vector = models.JSONField(default=list, blank=True)
     embedding_created_at = models.DateTimeField(null=True, blank=True)
+    caption_model = models.CharField(max_length=120, blank=True)
+    caption_en = models.TextField(blank=True)
+    caption_tokens = models.JSONField(default=list, blank=True)
+    caption_created_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
