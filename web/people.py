@@ -7,7 +7,7 @@ import numpy as np
 from django.core.files.base import ContentFile
 from django.db.models import Count, Prefetch
 from django.utils import timezone
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import AgglomerativeClustering
 
 from photo_ai import extract_faces, get_face_runtime_config
 from web.models import DetectedFace, Person, Photo
@@ -67,7 +67,14 @@ def _cluster_labels(vectors: list[list[float]], eps: float) -> np.ndarray:
         return np.array([0], dtype=np.int32)
 
     matrix = np.asarray(vectors, dtype=np.float32)
-    clustering = DBSCAN(eps=eps, min_samples=1, metric="cosine")
+    # Complete-linkage is stricter than DBSCAN chaining and works better here
+    # for small personal libraries where one face should not bridge two groups.
+    clustering = AgglomerativeClustering(
+        n_clusters=None,
+        metric="cosine",
+        linkage="complete",
+        distance_threshold=eps,
+    )
     return clustering.fit_predict(matrix)
 
 
