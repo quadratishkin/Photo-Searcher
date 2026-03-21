@@ -133,3 +133,29 @@ def create_image_embedding(file_obj: BinaryIO) -> dict[str, object]:
         "dimension": bundle.embedding_dimension,
         "vector": vector,
     }
+
+
+def create_text_embedding(query: str) -> dict[str, object]:
+    import open_clip
+    import torch
+
+    normalized_query = query.strip()
+    if not normalized_query:
+        raise ValueError("Текстовый запрос не должен быть пустым.")
+
+    bundle = _load_model_bundle()
+    tokenizer = open_clip.get_tokenizer(MODEL_NAME)
+    tokens = tokenizer([normalized_query]).to(bundle.device)
+
+    with torch.no_grad():
+        text_features = bundle.model.encode_text(tokens)
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+    vector = text_features.squeeze(0).detach().cpu().tolist()
+    return {
+        "model_name": MODEL_NAME,
+        "pretrained_tag": PRETRAINED_TAG,
+        "device": bundle.device,
+        "dimension": bundle.embedding_dimension,
+        "vector": vector,
+    }

@@ -10,6 +10,11 @@ type PhotoItem = {
   processingStatus: string;
 };
 
+type SearchResultItem = PhotoItem & {
+  score: number;
+  scorePercent: number;
+};
+
 type AuthUser = {
   id: number;
   username: string;
@@ -52,6 +57,22 @@ type AiStatusResponse = {
   reason: string;
 };
 
+type SearchResponse = {
+  query: string;
+  photos: Array<{
+    id: number;
+    url: string;
+    originalFilename: string;
+    processingStatus: string;
+    score: number;
+    scorePercent: number;
+  }>;
+  topK: number;
+  totalIndexedPhotos: number;
+  skippedPhotos?: number;
+  message?: string;
+};
+
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'library', label: 'Медиа' },
   { id: 'search', label: 'Поиск' },
@@ -92,6 +113,10 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [photosLoading, setPhotosLoading] = useState(false);
+  const [searchPending, setSearchPending] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [searchMessage, setSearchMessage] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
   const [uploadPending, setUploadPending] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -115,6 +140,9 @@ function App() {
   useEffect(() => {
     if (!user) {
       setPhotos([]);
+      setSearchResults([]);
+      setSearchMessage('');
+      setHasSearched(false);
       return;
     }
 
@@ -209,6 +237,17 @@ function App() {
       src: item.url,
       originalFilename: item.originalFilename,
       processingStatus: item.processingStatus,
+    };
+  }
+
+  function mapSearchResult(item: SearchResponse['photos'][number]): SearchResultItem {
+    return {
+      id: item.id,
+      src: item.url,
+      originalFilename: item.originalFilename,
+      processingStatus: item.processingStatus,
+      score: item.score,
+      scorePercent: item.scorePercent,
     };
   }
 
@@ -371,6 +410,47 @@ function App() {
     }
   }
 
+  async function submitSemanticSearch() {
+    const normalizedQuery = searchQuery.trim();
+    if (!normalizedQuery) {
+      setHasSearched(true);
+      setSearchResults([]);
+      setSearchMessage('Введите запрос, чтобы выполнить поиск по фотографии.');
+      return;
+    }
+
+    setSearchPending(true);
+    setHasSearched(true);
+    setSearchMessage('');
+
+    try {
+      const response = await fetch('/api/photos/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ query: normalizedQuery }),
+      });
+
+      const data = await readJsonSafely<SearchResponse & { message?: string }>(response);
+      if (!response.ok) {
+        setSearchResults([]);
+        setSearchMessage(data?.message ?? 'Не удалось выполнить поиск по фотографиям.');
+        return;
+      }
+
+      const mappedResults = (data?.photos ?? []).map(mapSearchResult);
+      setSearchResults(mappedResults);
+      setSearchMessage(data?.message ?? (mappedResults.length === 0 ? 'Ничего не найдено.' : ''));
+    } catch {
+      setSearchResults([]);
+      setSearchMessage('Ошибка связи с сервером поиска. Проверьте подключение и повторите запрос.');
+    } finally {
+      setSearchPending(false);
+    }
+  }
+
   if (!authChecked) {
     return (
       <div className="auth-shell loading-shell">
@@ -491,7 +571,16 @@ function App() {
           />
         )}
         {activeTab === 'search' && (
-          <SearchView aiStatus={aiStatus} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+          <SearchView
+            aiStatus={aiStatus}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            pending={searchPending}
+            results={searchResults}
+            message={searchMessage}
+            hasSearched={hasSearched}
+            onSubmit={submitSemanticSearch}
+          />
         )}
         {activeTab === 'people' && <PeopleView aiStatus={aiStatus} />}
       </main>
@@ -675,12 +764,31 @@ function SearchView({
   aiStatus,
   searchQuery,
   setSearchQuery,
+  pending,
+  results,
+  message,
+  hasSearched,
+  onSubmit,
 }: {
   aiStatus: AiStatusResponse;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
+  pending: boolean;
+  results: SearchResultItem[];
+  message: string;
+  hasSearched: boolean;
+  onSubmit: () => void;
 }) {
   const isAiUnavailable = !aiStatus.enabled;
+  const isSearchReady = aiStatus.enabled && aiStatus.state !== 'error' && aiStatus.state !== 'disabled';
+
+  function submitForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isSearchReady || pending) {
+      return;
+    }
+    void onSubmit();
+  }
 
   return (
     <section className="search-stage">
@@ -689,7 +797,7 @@ function SearchView({
         <p>Опишите человека, объект, сцену или место на фотографии.</p>
       </div>
 
-      <div className="search-composer">
+      <form className="search-composer" onSubmit={submitForm}>
         <div className="search-input-shell">
           <label className="sr-only-control" htmlFor="search-query">
             Поисковый запрос
@@ -699,29 +807,43 @@ function SearchView({
             className="search-textarea"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (!pending && isSearchReady) {
+                  void onSubmit();
+                }
+              }
+            }}
             placeholder="Например: девушка в очках рядом с машиной"
             rows={2}
           />
 
           <div className="search-toolbar">
-            <button className="search-tool-button" aria-label="Добавить фильтр">
-              <PlusIcon />
-            </button>
-
             <div className="search-suggestions-inline">
               {['закат у моря', 'человек с собакой', 'ночной город'].map((item) => (
-                <div key={item} className="glass-chip compact">
+                <button
+                  key={item}
+                  type="button"
+                  className="glass-chip compact search-suggestion-chip"
+                  onClick={() => setSearchQuery(item)}
+                >
                   {item}
-                </div>
+                </button>
               ))}
             </div>
 
-            <button className="search-voice-button" aria-label="Голосовой поиск">
-              <WaveIcon />
+            <button
+              type="submit"
+              className="search-submit-button"
+              aria-label="Запустить поиск"
+              disabled={!isSearchReady || pending}
+            >
+              {pending ? 'Ищем...' : 'Найти'}
             </button>
           </div>
         </div>
-      </div>
+      </form>
 
       {isAiUnavailable && (
         <div className="feature-status-card">
@@ -730,6 +852,33 @@ function SearchView({
           <p>Семантический поиск по фото недоступен, потому что AI-модуль сейчас не загружается.</p>
           <strong>{aiStatus.details}</strong>
         </div>
+      )}
+
+      {isSearchReady && (
+        <section className="search-results-panel">
+          {message && <div className="search-feedback-card">{message}</div>}
+
+          {!hasSearched && !message && (
+            <div className="search-feedback-card search-feedback-muted">
+              Введите описание сцены и запустите поиск. Сервер вернёт top-10 самых близких фотографий из вашей медиатеки.
+            </div>
+          )}
+
+          {hasSearched && !pending && results.length > 0 && (
+            <div className="search-results-grid">
+              {results.map((photo) => (
+                <article key={photo.id} className="search-result-card">
+                  <img src={photo.src} alt={photo.originalFilename} />
+                  <div className="photo-overlay" />
+                  <div className="search-result-meta">
+                    <strong>{photo.originalFilename}</strong>
+                    <span>Релевантность {photo.scorePercent.toFixed(1)}%</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       )}
     </section>
   );
@@ -771,17 +920,6 @@ function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M11.25 5h1.5v6.25H19v1.5h-6.25V19h-1.5v-6.25H5v-1.5h6.25V5Z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function WaveIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M5.5 9.25a1 1 0 0 1 1 1v3.5a1 1 0 1 1-2 0v-3.5a1 1 0 0 1 1-1Zm4-2.25a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1Zm4 3a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1Zm4-4a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1Z"
-        fill="currentColor"
-      />
     </svg>
   );
 }

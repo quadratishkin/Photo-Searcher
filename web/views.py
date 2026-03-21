@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
-from django.utils import timezone
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from photo_ai import create_image_embedding, get_ai_module_status
+from photo_ai import create_image_embedding, create_text_embedding, get_ai_module_status, get_embedding_engine_metadata
 from web.models import Photo
 
 
 User = get_user_model()
 ALPHA_REGISTRATION_CLOSED_MESSAGE = "Регистрация на альфа-тест новых пользователей временно не производится."
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+SEARCH_RESULTS_LIMIT = 10
 
 
 def parse_json_body(request: HttpRequest) -> dict:
@@ -47,6 +49,28 @@ def serialize_photo(photo: Photo) -> dict:
         "embeddingModel": photo.embedding_model,
         "createdAt": photo.created_at.isoformat(),
     }
+
+
+def serialize_search_hit(photo: Photo, score: float) -> dict:
+    normalized_score = max(0.0, min(1.0, (score + 1.0) / 2.0))
+    payload = serialize_photo(photo)
+    payload.update(
+        {
+            "score": round(score, 6),
+            "scorePercent": round(normalized_score * 100, 2),
+        }
+    )
+    return payload
+
+
+def is_valid_embedding_vector(vector: object, dimension: int) -> bool:
+    if not isinstance(vector, list) or len(vector) != dimension:
+        return False
+    return all(isinstance(value, (int, float)) and math.isfinite(float(value)) for value in vector)
+
+
+def dot_product(left: list[float], right: list[float]) -> float:
+    return sum(float(left_item) * float(right_item) for left_item, right_item in zip(left, right, strict=True))
 
 
 @ensure_csrf_cookie
@@ -119,6 +143,113 @@ def photo_list(request: HttpRequest) -> JsonResponse:
 
     photos = [serialize_photo(photo) for photo in Photo.objects.filter(user=request.user)]
     return JsonResponse({"photos": photos})
+
+
+@require_POST
+def photo_search(request: HttpRequest) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    payload = parse_json_body(request)
+    query = str(payload.get("query", "")).strip()
+    if not query:
+        return JsonResponse({"message": "Введите текстовый запрос для поиска."}, status=400)
+
+    try:
+        engine_metadata = get_embedding_engine_metadata()
+    except Exception as exc:
+        return JsonResponse(
+            {"message": f"AI-модуль недоступен для поиска: {exc}"},
+            status=503,
+        )
+
+    expected_model_name = str(engine_metadata["model_name"])
+    expected_pretrained_tag = str(engine_metadata["pretrained_tag"])
+    expected_dimension = int(engine_metadata["embedding_dimension"])
+
+    indexed_photos = list(
+        Photo.objects.filter(user=request.user, embedding_dimension__gt=0)
+        .only(
+            "id",
+            "image",
+            "original_filename",
+            "file_extension",
+            "mime_type",
+            "file_size_bytes",
+            "processing_status",
+            "created_at",
+            "embedding_model",
+            "embedding_pretrained_tag",
+            "embedding_dimension",
+            "embedding_vector",
+        )
+    )
+    if not indexed_photos:
+        return JsonResponse(
+            {
+                "query": query,
+                "photos": [],
+                "totalIndexedPhotos": 0,
+                "message": "В вашей медиатеке пока нет проиндексированных фото для семантического поиска.",
+            }
+        )
+
+    try:
+        text_embedding = create_text_embedding(query)
+    except ValueError as exc:
+        return JsonResponse({"message": str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse(
+            {"message": f"Не удалось построить embedding для текстового запроса: {exc}"},
+            status=500,
+        )
+
+    query_vector = list(text_embedding["vector"])
+    search_hits: list[tuple[float, Photo]] = []
+    skipped_photos = 0
+
+    for photo in indexed_photos:
+        if photo.embedding_model != expected_model_name:
+            skipped_photos += 1
+            continue
+        if photo.embedding_pretrained_tag != expected_pretrained_tag:
+            skipped_photos += 1
+            continue
+        if photo.embedding_dimension != expected_dimension:
+            skipped_photos += 1
+            continue
+        if not is_valid_embedding_vector(photo.embedding_vector, expected_dimension):
+            skipped_photos += 1
+            continue
+
+        similarity = dot_product(query_vector, photo.embedding_vector)
+        search_hits.append((similarity, photo))
+
+    if not search_hits:
+        return JsonResponse(
+            {
+                "query": query,
+                "photos": [],
+                "totalIndexedPhotos": len(indexed_photos),
+                "skippedPhotos": skipped_photos,
+                "message": "Не найдено ни одного фото с валидным embedding-индексом для текущей AI-модели.",
+            }
+        )
+
+    search_hits.sort(key=lambda item: item[0], reverse=True)
+    top_hits = search_hits[:SEARCH_RESULTS_LIMIT]
+
+    return JsonResponse(
+        {
+            "query": query,
+            "photos": [serialize_search_hit(photo, score) for score, photo in top_hits],
+            "topK": SEARCH_RESULTS_LIMIT,
+            "totalIndexedPhotos": len(indexed_photos),
+            "skippedPhotos": skipped_photos,
+            "message": "" if top_hits else "Совпадений не найдено.",
+        }
+    )
 
 
 @require_POST
