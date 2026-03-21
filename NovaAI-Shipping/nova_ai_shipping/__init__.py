@@ -1,4 +1,5 @@
 from .embeddings import (
+    configure_runtime,
     create_image_embedding,
     create_photo_index,
     create_text_embedding,
@@ -8,6 +9,7 @@ from .embeddings import (
 )
 
 __all__ = [
+    "configure_runtime",
     "create_image_embedding",
     "create_photo_index",
     "create_text_embedding",

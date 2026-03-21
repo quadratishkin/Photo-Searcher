@@ -375,7 +375,7 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
                 embedding_dimension=int(embedding_result["dimension"]),
                 embedding_vector=list(embedding_result["vector"]),
                 embedding_created_at=timezone.now(),
-                caption_model="Salesforce/blip-image-captioning-base",
+                caption_model=str(photo_index["caption_model_name"]),
                 caption_en=str(photo_index["caption_en"]),
                 caption_tokens=list(photo_index["caption_tokens"]),
                 caption_created_at=timezone.now(),

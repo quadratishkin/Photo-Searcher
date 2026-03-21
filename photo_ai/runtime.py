@@ -70,6 +70,12 @@ def _is_enabled(raw_value: str | None) -> bool:
     return (raw_value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _get_configured_shipping_module(config: dict[str, str] | None = None):
+    shipping = _get_shipping_module()
+    shipping.configure_runtime(config or _parse_config_file())
+    return shipping
+
+
 def load_ai_module() -> dict[str, str | bool]:
     global _has_attempted_load, _status
 
@@ -88,7 +94,7 @@ def load_ai_module() -> dict[str, str | bool]:
             )
             return asdict(_status)
 
-        shipping = _get_shipping_module()
+        shipping = _get_configured_shipping_module(config)
         shipping_status = shipping.get_runtime_status()
 
         _has_attempted_load = True
@@ -104,13 +110,26 @@ def load_ai_module() -> dict[str, str | bool]:
 
 def get_ai_module_status() -> dict[str, str | bool]:
     with _status_lock:
-        if not _has_attempted_load:
+        config = _parse_config_file()
+        if not _is_enabled(config.get("bEnableAiModule")):
             return load_ai_module()
+
+        shipping = _get_configured_shipping_module(config)
+        shipping_status = shipping.get_runtime_status()
+        global _has_attempted_load, _status
+        _has_attempted_load = True
+        _status = AiModuleStatus(
+            enabled=True,
+            state=str(shipping_status["state"]),
+            summary=str(shipping_status["summary"]),
+            details=str(shipping_status["details"]),
+            reason=str(shipping_status["reason"]),
+        )
         return asdict(_status)
 
 
 def get_embedding_engine_metadata() -> dict[str, str | int]:
-    shipping = _get_shipping_module()
+    shipping = _get_configured_shipping_module()
     return shipping.get_engine_metadata()
 
 
@@ -120,7 +139,7 @@ def create_image_embedding(file_obj) -> dict[str, object]:
     if not enabled:
         raise RuntimeError("AI-модуль отключён в CoreAI.config.")
 
-    shipping = _get_shipping_module()
+    shipping = _get_configured_shipping_module(config)
     result = shipping.create_image_embedding(file_obj)
 
     with _status_lock:
@@ -144,7 +163,7 @@ def create_text_embedding(query: str) -> dict[str, object]:
     if not enabled:
         raise RuntimeError("AI-модуль отключён в CoreAI.config.")
 
-    shipping = _get_shipping_module()
+    shipping = _get_configured_shipping_module(config)
     result = shipping.create_text_embedding(query)
 
     with _status_lock:
@@ -168,7 +187,7 @@ def create_photo_index(file_obj) -> dict[str, object]:
     if not enabled:
         raise RuntimeError("AI-модуль отключён в CoreAI.config.")
 
-    shipping = _get_shipping_module()
+    shipping = _get_configured_shipping_module(config)
     result = shipping.create_photo_index(file_obj)
 
     with _status_lock:
@@ -192,7 +211,7 @@ def translate_text_to_english(text: str) -> str:
     if not enabled:
         raise RuntimeError("AI-модуль отключён в CoreAI.config.")
 
-    shipping = _get_shipping_module()
+    shipping = _get_configured_shipping_module(config)
     result = shipping.translate_text_to_english(text)
 
     with _status_lock:

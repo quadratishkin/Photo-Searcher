@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
 
-MODEL_NAME = "ViT-B-32"
-PRETRAINED_TAG = "laion2b_s34b_b79k"
-CAPTION_MODEL_NAME = "Salesforce/blip-image-captioning-base"
-TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-ru-en"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MODEL_NAME = "ViT-B-32"
+DEFAULT_PRETRAINED_TAG = "laion2b_s34b_b79k"
+DEFAULT_CAPTION_MODEL_NAME = "Salesforce/blip-image-captioning-base"
+DEFAULT_TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-ru-en"
+DEFAULT_COMPUTE_DEVICE = "auto"
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
@@ -48,6 +51,16 @@ class CaptionBundle:
 class TranslationBundle:
     tokenizer: object
     model: object
+    device: str
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    model_name: str
+    pretrained_tag: str
+    caption_model_name: str
+    translation_model_name: str
+    compute_device: str
 
 
 _model_bundle: ModelBundle | None = None
@@ -62,12 +75,104 @@ _runtime_status = RuntimeStatus(
     details="Модель будет поднята при первой загрузке фото",
     reason="Ленивая инициализация для server-side embedding pipeline.",
 )
+_runtime_config = RuntimeConfig(
+    model_name=DEFAULT_MODEL_NAME,
+    pretrained_tag=DEFAULT_PRETRAINED_TAG,
+    caption_model_name=DEFAULT_CAPTION_MODEL_NAME,
+    translation_model_name=DEFAULT_TRANSLATION_MODEL_NAME,
+    compute_device=DEFAULT_COMPUTE_DEVICE,
+)
+
+
+def _resolve_project_path(value: str) -> str:
+    stripped_value = value.strip()
+    if not stripped_value:
+        return stripped_value
+
+    candidate_path = Path(stripped_value).expanduser()
+    if candidate_path.is_absolute():
+        return str(candidate_path)
+
+    project_candidate = (PROJECT_ROOT / candidate_path).resolve()
+    if project_candidate.exists():
+        return str(project_candidate)
+
+    return stripped_value
+
+
+def _normalize_runtime_config(config: dict[str, str] | None) -> RuntimeConfig:
+    source = config or {}
+    compute_device = str(source.get("sComputeDevice", DEFAULT_COMPUTE_DEVICE)).strip().lower() or DEFAULT_COMPUTE_DEVICE
+    if compute_device not in {"auto", "cuda", "mps", "cpu"}:
+        compute_device = DEFAULT_COMPUTE_DEVICE
+
+    model_name = str(source.get("sOpenClipModelName", DEFAULT_MODEL_NAME)).strip() or DEFAULT_MODEL_NAME
+    pretrained_tag = str(source.get("sOpenClipPretrained", DEFAULT_PRETRAINED_TAG)).strip() or DEFAULT_PRETRAINED_TAG
+    caption_model_name = str(source.get("sCaptionModelName", DEFAULT_CAPTION_MODEL_NAME)).strip() or DEFAULT_CAPTION_MODEL_NAME
+    translation_model_name = (
+        str(source.get("sTranslationModelName", DEFAULT_TRANSLATION_MODEL_NAME)).strip()
+        or DEFAULT_TRANSLATION_MODEL_NAME
+    )
+
+    return RuntimeConfig(
+        model_name=model_name,
+        pretrained_tag=_resolve_project_path(pretrained_tag),
+        caption_model_name=_resolve_project_path(caption_model_name),
+        translation_model_name=_resolve_project_path(translation_model_name),
+        compute_device=compute_device,
+    )
+
+
+def _reset_runtime_state(reason: str) -> None:
+    global _model_bundle, _caption_bundle, _translation_bundle, _runtime_status
+
+    _model_bundle = None
+    _caption_bundle = None
+    _translation_bundle = None
+    _runtime_status = RuntimeStatus(
+        state="idle",
+        summary="AI runtime перенастроен",
+        details="Модели будут загружены заново при следующем запросе",
+        reason=reason,
+    )
+
+
+def configure_runtime(config: dict[str, str] | None = None) -> dict[str, str]:
+    global _runtime_config
+
+    normalized_config = _normalize_runtime_config(config)
+    with _model_lock, _caption_lock, _translation_lock:
+        if normalized_config != _runtime_config:
+            _runtime_config = normalized_config
+            _reset_runtime_state("Изменились параметры модели или устройства вычислений.")
+    return asdict(_runtime_config)
 
 
 def _detect_device() -> str:
     import torch
 
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    requested_device = _runtime_config.compute_device
+    has_cuda = torch.cuda.is_available()
+    has_mps = bool(getattr(torch.backends, "mps", None)) and torch.backends.mps.is_built() and torch.backends.mps.is_available()
+
+    if requested_device == "auto":
+        if has_cuda:
+            return "cuda"
+        if has_mps:
+            return "mps"
+        return "cpu"
+
+    if requested_device == "cuda":
+        if not has_cuda:
+            raise RuntimeError("В CoreAI.config выбран CUDA, но он недоступен на текущем устройстве.")
+        return "cuda"
+
+    if requested_device == "mps":
+        if not has_mps:
+            raise RuntimeError("В CoreAI.config выбран MPS, но PyTorch MPS недоступен на текущем устройстве.")
+        return "mps"
+
+    return "cpu"
 
 
 def _load_model_bundle() -> ModelBundle:
@@ -91,14 +196,21 @@ def _load_model_bundle() -> ModelBundle:
 
         device = _detect_device()
         model, _, preprocess = open_clip.create_model_and_transforms(
-            MODEL_NAME,
-            pretrained=PRETRAINED_TAG,
+            _runtime_config.model_name,
+            pretrained=_runtime_config.pretrained_tag,
             device=device,
         )
         model.eval()
 
+        image_size = getattr(getattr(model, "visual", None), "image_size", 224)
+        if isinstance(image_size, tuple):
+            probe_height, probe_width = image_size
+        else:
+            probe_height = int(image_size)
+            probe_width = int(image_size)
+
         with torch.no_grad():
-            probe = torch.zeros((1, 3, 224, 224), device=device)
+            probe = torch.zeros((1, 3, probe_height, probe_width), device=device)
             probe_features = model.encode_image(probe)
         embedding_dimension = int(probe_features.shape[-1])
 
@@ -110,9 +222,9 @@ def _load_model_bundle() -> ModelBundle:
         )
         _runtime_status = RuntimeStatus(
             state="ready",
-            summary="OpenCLIP активен",
-            details=f"{MODEL_NAME} / {PRETRAINED_TAG} / {device}",
-            reason="Image embedding pipeline готов к обработке новых фото.",
+            summary="AI retrieval активен",
+            details=f"{_runtime_config.model_name} / {_runtime_config.pretrained_tag} / {device}",
+            reason="Embedding и hybrid search pipeline готовы к обработке новых фото и запросов.",
         )
         return _model_bundle
 
@@ -130,8 +242,8 @@ def _load_caption_bundle() -> CaptionBundle:
             raise RuntimeError("BLIP зависимости не установлены.") from exc
 
         device = _detect_device()
-        processor = BlipProcessor.from_pretrained(CAPTION_MODEL_NAME)
-        model = BlipForConditionalGeneration.from_pretrained(CAPTION_MODEL_NAME).to(device)
+        processor = BlipProcessor.from_pretrained(_runtime_config.caption_model_name)
+        model = BlipForConditionalGeneration.from_pretrained(_runtime_config.caption_model_name).to(device)
         model.eval()
 
         _caption_bundle = CaptionBundle(
@@ -154,11 +266,12 @@ def _load_translation_bundle() -> TranslationBundle:
         except ImportError as exc:
             raise RuntimeError("Translation зависимости не установлены.") from exc
 
-        tokenizer = AutoTokenizer.from_pretrained(TRANSLATION_MODEL_NAME)
-        model = AutoModelForSeq2SeqLM.from_pretrained(TRANSLATION_MODEL_NAME)
+        device = _detect_device()
+        tokenizer = AutoTokenizer.from_pretrained(_runtime_config.translation_model_name)
+        model = AutoModelForSeq2SeqLM.from_pretrained(_runtime_config.translation_model_name).to(device)
         model.eval()
 
-        _translation_bundle = TranslationBundle(tokenizer=tokenizer, model=model)
+        _translation_bundle = TranslationBundle(tokenizer=tokenizer, model=model, device=device)
         return _translation_bundle
 
 
@@ -184,8 +297,8 @@ def extract_search_tokens(text: str) -> list[str]:
 def get_engine_metadata() -> dict[str, str | int]:
     bundle = _load_model_bundle()
     metadata = EngineMetadata(
-        model_name=MODEL_NAME,
-        pretrained_tag=PRETRAINED_TAG,
+        model_name=_runtime_config.model_name,
+        pretrained_tag=_runtime_config.pretrained_tag,
         device=bundle.device,
         embedding_dimension=bundle.embedding_dimension,
     )
@@ -212,8 +325,8 @@ def create_image_embedding(file_obj: BinaryIO) -> dict[str, object]:
 
     vector = image_features.squeeze(0).detach().cpu().tolist()
     return {
-        "model_name": MODEL_NAME,
-        "pretrained_tag": PRETRAINED_TAG,
+        "model_name": _runtime_config.model_name,
+        "pretrained_tag": _runtime_config.pretrained_tag,
         "device": bundle.device,
         "dimension": bundle.embedding_dimension,
         "vector": vector,
@@ -229,7 +342,7 @@ def create_text_embedding(query: str) -> dict[str, object]:
         raise ValueError("Текстовый запрос не должен быть пустым.")
 
     bundle = _load_model_bundle()
-    tokenizer = open_clip.get_tokenizer(MODEL_NAME)
+    tokenizer = open_clip.get_tokenizer(_runtime_config.model_name)
     tokens = tokenizer([normalized_query]).to(bundle.device)
 
     with torch.no_grad():
@@ -238,8 +351,8 @@ def create_text_embedding(query: str) -> dict[str, object]:
 
     vector = text_features.squeeze(0).detach().cpu().tolist()
     return {
-        "model_name": MODEL_NAME,
-        "pretrained_tag": PRETRAINED_TAG,
+        "model_name": _runtime_config.model_name,
+        "pretrained_tag": _runtime_config.pretrained_tag,
         "device": bundle.device,
         "dimension": bundle.embedding_dimension,
         "vector": vector,
@@ -282,11 +395,12 @@ def translate_text_to_english(text: str) -> str:
 
     bundle = _load_translation_bundle()
     inputs = bundle.tokenizer(normalized_text, return_tensors="pt", truncation=True)
+    prepared_inputs = {name: value.to(bundle.device) for name, value in inputs.items()}
 
     with torch.no_grad():
-        output_tokens = bundle.model.generate(**inputs, max_new_tokens=64)
+        output_tokens = bundle.model.generate(**prepared_inputs, max_new_tokens=64)
 
-    translated = bundle.tokenizer.decode(output_tokens[0], skip_special_tokens=True).strip()
+    translated = bundle.tokenizer.decode(output_tokens[0].detach().cpu(), skip_special_tokens=True).strip()
     if not translated:
         raise RuntimeError("Не удалось перевести запрос на английский.")
     return normalize_english_text(translated)
@@ -300,6 +414,7 @@ def create_photo_index(file_obj: BinaryIO) -> dict[str, object]:
 
     return {
         "embedding": image_embedding,
+        "caption_model_name": _runtime_config.caption_model_name,
         "caption_en": caption_en,
         "caption_tokens": caption_tokens,
     }

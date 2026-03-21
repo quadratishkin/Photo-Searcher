@@ -58,7 +58,7 @@ class Command(BaseCommand):
             photo.embedding_dimension = int(embedding_data["dimension"])
             photo.embedding_vector = list(embedding_data["vector"])
             photo.embedding_created_at = timezone.now()
-            photo.caption_model = "Salesforce/blip-image-captioning-base"
+            photo.caption_model = str(index_data["caption_model_name"])
             photo.caption_en = str(index_data["caption_en"])
             photo.caption_tokens = list(index_data["caption_tokens"])
             photo.caption_created_at = timezone.now()
