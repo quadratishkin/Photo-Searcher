@@ -98,6 +98,16 @@ Future readers should be able to understand how uploads, indexing, search, and p
 ### Focus on visible value
 When choosing between invisible perfection and a demo-visible improvement, prefer the demo-visible improvement unless it creates dangerous technical debt.
 
+### Use subagents when parallelism is real
+When the task can be cleanly split into independent subtasks, prefer using Codex subagents to reduce pressure on the main context window and to move faster.
+
+Guidelines:
+- keep the main agent focused on critical-path decisions, integration, architecture, and final verification,
+- delegate bounded side tasks such as targeted code exploration, isolated implementation work, focused experiments, or non-blocking verification,
+- do **not** delegate tightly coupled work that the main agent must immediately reason about,
+- do **not** spawn subagents just for the sake of using them; use them only when the split is genuinely useful,
+- prefer delegation when it is likely to save context budget, time, or cost without increasing coordination risk.
+
 ---
 
 ## Expected Technical Direction
