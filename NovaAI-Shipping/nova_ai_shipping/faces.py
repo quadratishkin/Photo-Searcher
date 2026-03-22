@@ -244,20 +244,44 @@ def _clamp_bbox(bbox: list[float], width: int, height: int) -> tuple[int, int, i
     )
 
 
+def _sample_fill_color(image: Image.Image, crop_box: tuple[int, int, int, int]) -> tuple[int, int, int]:
+    left, top, right, bottom = crop_box
+    if right <= left or bottom <= top:
+        return (18, 28, 40)
+
+    sample = image.crop(crop_box).resize((1, 1), Image.Resampling.BILINEAR)
+    color = sample.getpixel((0, 0))
+    if isinstance(color, int):
+        return (color, color, color)
+    return tuple(int(channel) for channel in color[:3])
+
+
 def _build_face_preview(image: Image.Image, bbox: list[float]) -> bytes:
     width, height = image.size
     x1, y1, x2, y2 = _clamp_bbox(bbox, width, height)
     face_width = max(1, x2 - x1)
     face_height = max(1, y2 - y1)
-    padding = int(round(max(face_width, face_height) * 0.28))
+    preview_size = max(96, int(round(max(face_width, face_height) * 1.38)))
+    center_x = (x1 + x2) / 2
+    center_y = ((y1 + y2) / 2) - (face_height * 0.05)
 
-    crop_box = (
-        max(0, x1 - padding),
-        max(0, y1 - padding),
-        min(width, x2 + padding),
-        min(height, y2 + padding),
-    )
-    crop = image.crop(crop_box).resize((320, 320), Image.Resampling.LANCZOS)
+    left = int(round(center_x - (preview_size / 2)))
+    top = int(round(center_y - (preview_size / 2)))
+    right = left + preview_size
+    bottom = top + preview_size
+
+    source_left = max(0, left)
+    source_top = max(0, top)
+    source_right = min(width, right)
+    source_bottom = min(height, bottom)
+    crop_box = (source_left, source_top, source_right, source_bottom)
+    crop = image.crop(crop_box)
+
+    canvas = Image.new("RGB", (preview_size, preview_size), _sample_fill_color(image, crop_box))
+    paste_x = source_left - left
+    paste_y = source_top - top
+    canvas.paste(crop, (paste_x, paste_y))
+    crop = canvas.resize((320, 320), Image.Resampling.LANCZOS)
     buffer = BytesIO()
     crop.save(buffer, format="JPEG", quality=92)
     return buffer.getvalue()
