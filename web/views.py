@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 from pathlib import Path
@@ -33,6 +34,7 @@ CAPTION_SCORE_WEIGHT = 0.35
 EMBEDDING_SCORE_WEIGHT = 0.55
 TOKEN_BONUS_WEIGHT = 0.10
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+logger = logging.getLogger("liquid_photos.search")
 
 
 def parse_json_body(request: HttpRequest) -> dict:
@@ -271,9 +273,12 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     if not query:
         return JsonResponse({"message": "Введите текстовый запрос для поиска."}, status=400)
 
+    logger.info("photo_search.request user=%s query=%r", request.user.get_username(), query)
+
     try:
         engine_metadata = get_embedding_engine_metadata()
     except Exception as exc:
+        logger.exception("photo_search.engine_unavailable user=%s query=%r", request.user.get_username(), query)
         return JsonResponse(
             {"message": f"AI-модуль недоступен для поиска: {exc}"},
             status=503,
@@ -297,6 +302,20 @@ def photo_search(request: HttpRequest) -> JsonResponse:
             "used_rewriter": False,
             "fallback_reason": "rewrite_search_query недоступен; использован обычный перевод.",
         }
+
+    logger.info(
+        "photo_search.interpreted user=%s query=%r normalized_ru=%r normalized_en=%r prompt=%r rewriter_used=%s fallback_reason=%r model=%s/%s dim=%s",
+        request.user.get_username(),
+        query,
+        str(rewrite_debug["normalized_ru"]),
+        str(rewrite_debug["normalized_en"]),
+        str(rewrite_debug["search_prompt_en"]),
+        bool(rewrite_debug["used_rewriter"]),
+        str(rewrite_debug["fallback_reason"]),
+        expected_model_name,
+        expected_pretrained_tag,
+        expected_dimension,
+    )
 
     translated_query = str(rewrite_debug["normalized_en"])
     search_prompt_en = str(rewrite_debug["search_prompt_en"])
@@ -322,6 +341,7 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         )
     )
     if not indexed_photos:
+        logger.info("photo_search.no_indexed_photos user=%s query=%r", request.user.get_username(), query)
         return JsonResponse(
             {
                 "query": query,
@@ -334,8 +354,20 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     try:
         text_embedding = create_text_embedding(search_prompt_en)
     except ValueError as exc:
+        logger.warning(
+            "photo_search.invalid_query user=%s query=%r prompt=%r",
+            request.user.get_username(),
+            query,
+            search_prompt_en,
+        )
         return JsonResponse({"message": str(exc)}, status=400)
     except Exception as exc:
+        logger.exception(
+            "photo_search.embedding_failed user=%s query=%r prompt=%r",
+            request.user.get_username(),
+            query,
+            search_prompt_en,
+        )
         return JsonResponse(
             {"message": f"Не удалось построить embedding для текстового запроса: {exc}"},
             status=500,
@@ -379,6 +411,14 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         search_hits.append((hybrid_score, photo, debug_meta))
 
     if not search_hits:
+        logger.info(
+            "photo_search.no_valid_hits user=%s query=%r prompt=%r indexed=%s skipped=%s",
+            request.user.get_username(),
+            query,
+            search_prompt_en,
+            len(indexed_photos),
+            skipped_photos,
+        )
         return JsonResponse(
             {
                 "query": query,
@@ -391,6 +431,27 @@ def photo_search(request: HttpRequest) -> JsonResponse:
 
     search_hits.sort(key=lambda item: item[0], reverse=True)
     top_hits = search_hits[:SEARCH_RESULTS_LIMIT]
+    returned_photos = [
+        {
+            "photo_id": photo.id,
+            "filename": photo.original_filename,
+            "score": round(score, 6),
+            "embedding_score": debug_meta["embeddingScore"],
+            "caption_score": debug_meta["captionScore"],
+            "token_bonus": debug_meta["tokenBonus"],
+        }
+        for score, photo, debug_meta in top_hits
+    ]
+
+    logger.info(
+        "photo_search.response user=%s query=%r prompt=%r indexed=%s skipped=%s returned=%s",
+        request.user.get_username(),
+        query,
+        search_prompt_en,
+        len(indexed_photos),
+        skipped_photos,
+        returned_photos,
+    )
 
     return JsonResponse(
         {

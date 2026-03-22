@@ -866,7 +866,7 @@ button {
   text-align: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.85rem 0.7rem;
+  padding: 0.95rem 0.7rem 1.1rem;
   border-radius: 1.3rem;
   border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.04);
@@ -891,6 +891,9 @@ button {
   margin: 0;
   font-size: 1.02rem;
   font-weight: 700;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .person-portrait-shell {
@@ -928,8 +931,12 @@ button {
 }
 
 .person-count {
+  display: block;
+  max-width: 100%;
   color: rgba(255, 255, 255, 0.68);
   font-size: 0.95rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .people-detail-card {
