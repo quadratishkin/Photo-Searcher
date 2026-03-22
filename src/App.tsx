@@ -1141,9 +1141,7 @@ function PeopleView({
                     )}
                   </div>
                   <h3>{title}</h3>
-                  <span className="person-count">
-                    {person.photoCount} фото, {person.faceCount} лиц
-                  </span>
+                  <span className="person-count">{person.photoCount} фото</span>
                 </button>
               );
             })}

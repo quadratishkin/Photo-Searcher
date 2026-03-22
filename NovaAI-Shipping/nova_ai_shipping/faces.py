@@ -256,14 +256,31 @@ def _sample_fill_color(image: Image.Image, crop_box: tuple[int, int, int, int]) 
     return tuple(int(channel) for channel in color[:3])
 
 
-def _build_face_preview(image: Image.Image, bbox: list[float]) -> bytes:
+def _build_face_preview(image: Image.Image, bbox: list[float], landmarks: list[list[float]] | None = None) -> bytes:
     width, height = image.size
     x1, y1, x2, y2 = _clamp_bbox(bbox, width, height)
     face_width = max(1, x2 - x1)
     face_height = max(1, y2 - y1)
-    preview_size = max(96, int(round(max(face_width, face_height) * 1.38)))
+
     center_x = (x1 + x2) / 2
-    center_y = ((y1 + y2) / 2) - (face_height * 0.05)
+    center_y = (y1 + y2) / 2
+    preview_size = max(96, int(round(max(face_width, face_height) * 1.38)))
+
+    points = np.asarray(landmarks or [], dtype=np.float32)
+    if points.ndim == 2 and points.shape[0] >= 3 and points.shape[1] == 2:
+        points[:, 0] = np.clip(points[:, 0], 0, width)
+        points[:, 1] = np.clip(points[:, 1], 0, height)
+        eye_y = float(points[:2, 1].mean()) if points.shape[0] >= 2 else float(points[:, 1].min())
+        mouth_y = float(points[3:, 1].mean()) if points.shape[0] >= 5 else float(points[:, 1].max())
+        crop_left = min(x1, float(points[:, 0].min()) - (face_width * 0.24))
+        crop_right = max(x2, float(points[:, 0].max()) + (face_width * 0.24))
+        crop_top = min(y1 - (face_height * 0.18), eye_y - (face_height * 0.58))
+        crop_bottom = max(y2 + (face_height * 0.12), mouth_y + (face_height * 0.34))
+        center_x = (crop_left + crop_right) / 2
+        center_y = (crop_top + crop_bottom) / 2
+        preview_size = max(preview_size, int(round(max(crop_right - crop_left, crop_bottom - crop_top))))
+    else:
+        center_y = ((y1 + y2) / 2) - (face_height * 0.05)
 
     left = int(round(center_x - (preview_size / 2)))
     top = int(round(center_y - (preview_size / 2)))
@@ -307,6 +324,10 @@ def extract_faces(file_obj) -> list[dict[str, object]]:
 
     for face in faces:
         bbox = [float(value) for value in np.asarray(face.bbox).tolist()]
+        landmarks = [
+            [float(point[0]), float(point[1])]
+            for point in np.asarray(getattr(face, "kps", np.empty((0, 2)))).tolist()
+        ]
         x1, y1, x2, y2 = bbox
         face_width = max(0.0, x2 - x1)
         face_height = max(0.0, y2 - y1)
@@ -319,15 +340,12 @@ def extract_faces(file_obj) -> list[dict[str, object]]:
         if embedding is None:
             continue
 
-        preview_bytes = _build_face_preview(image, bbox)
+        preview_bytes = _build_face_preview(image, bbox, landmarks)
         quality_score = float((det_score * face_size) / max_dimension)
         detected_faces.append(
             {
                 "bbox": bbox,
-                "landmarks": [
-                    [float(point[0]), float(point[1])]
-                    for point in np.asarray(getattr(face, "kps", np.empty((0, 2)))).tolist()
-                ],
+                "landmarks": landmarks,
                 "detection_score": det_score,
                 "quality_score": quality_score,
                 "embedding_model": config.model_pack,
