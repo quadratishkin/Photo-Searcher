@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import json
 from dataclasses import asdict, dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
@@ -17,24 +18,28 @@ DEFAULT_COMPUTE_DEVICE = "auto"
 DEFAULT_QUERY_REWRITE_ENABLED = False
 DEFAULT_QUERY_REWRITE_MODEL_PATH = "NovaAI-Shipping/models/query-rewriter/Qwen2.5-1.5B-Instruct-4bit"
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+RUSSIAN_TOKEN_PATTERN = re.compile(r"[a-zа-яё0-9-]+", re.IGNORECASE)
 JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 QUERY_REWRITE_SYSTEM_PROMPT = """You normalize noisy Russian photo-search queries.
 Rules:
-1. Fix obvious typos and slang carefully.
+1. Fix only obvious typos, punctuation, spacing, and inflection mistakes.
 2. Preserve meaning exactly.
-3. Never replace objects with different objects.
+3. Never replace a word with a synonym, a more generic word, slang normalization, or a different object.
 4. Never add details not present in the query.
 5. Keep ambiguity if the query is ambiguous.
 6. Return strict JSON only with keys normalized_ru, normalized_en, search_prompt_en.
 7. search_prompt_en must be a short English visual search query, not a full explanation.
 8. Keep person references like "я" only if they were already present in the query.
+9. If the Russian query is already valid, keep normalized_ru unchanged.
 Examples:
 Input: чел с сабакой на пляжи
-Output: {"normalized_ru":"человек с собакой на пляже","normalized_en":"person with a dog on the beach","search_prompt_en":"person with a dog on the beach"}
+Output: {"normalized_ru":"чел с собакой на пляже","normalized_en":"guy with a dog on the beach","search_prompt_en":"guy with a dog on the beach"}
 Input: какой то закатик у воды
-Output: {"normalized_ru":"какой-то закат у воды","normalized_en":"sunset by the water","search_prompt_en":"sunset by the water"}
+Output: {"normalized_ru":"какой-то закатик у воды","normalized_en":"sunset by the water","search_prompt_en":"sunset by the water"}
 Input: девка в очках возле тачки на море
-Output: {"normalized_ru":"девушка в очках рядом с машиной у моря","normalized_en":"woman wearing glasses near a car by the sea","search_prompt_en":"woman wearing glasses near a car by the sea"}
+Output: {"normalized_ru":"девка в очках возле тачки на море","normalized_en":"woman in glasses near a car by the sea","search_prompt_en":"woman in glasses near a car by the sea"}
+Input: Госпожа
+Output: {"normalized_ru":"Госпожа","normalized_en":"madam","search_prompt_en":"madam"}
 """
 
 
@@ -361,6 +366,12 @@ def normalize_english_text(text: str) -> str:
     return normalized
 
 
+def normalize_russian_text(text: str) -> str:
+    normalized = text.strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized
+
+
 def extract_search_tokens(text: str) -> list[str]:
     normalized = normalize_english_text(text)
     tokens = TOKEN_PATTERN.findall(normalized)
@@ -538,8 +549,30 @@ def _extract_json_object(raw_text: str) -> dict[str, str]:
     return {str(key): str(value).strip() for key, value in payload.items()}
 
 
+def _tokenize_russian_text(text: str) -> list[str]:
+    return [token.lower() for token in RUSSIAN_TOKEN_PATTERN.findall(normalize_russian_text(text))]
+
+
+def _is_safe_russian_rewrite(original: str, candidate: str) -> bool:
+    normalized_original = normalize_russian_text(original)
+    normalized_candidate = normalize_russian_text(candidate)
+    if normalized_candidate == normalized_original:
+        return True
+
+    original_tokens = _tokenize_russian_text(normalized_original)
+    candidate_tokens = _tokenize_russian_text(normalized_candidate)
+    if not original_tokens or len(original_tokens) != len(candidate_tokens):
+        return False
+
+    for left, right in zip(original_tokens, candidate_tokens, strict=True):
+        if SequenceMatcher(None, left, right).ratio() < 0.72:
+            return False
+
+    return True
+
+
 def rewrite_search_query(query: str) -> dict[str, str | bool]:
-    normalized_query = query.strip()
+    normalized_query = normalize_russian_text(query)
     if not normalized_query:
         raise ValueError("Текстовый запрос не должен быть пустым.")
 
@@ -593,7 +626,9 @@ def rewrite_search_query(query: str) -> dict[str, str | bool]:
         raw_output = generate(bundle.model, bundle.tokenizer, prompt=prompt, verbose=False, max_tokens=120)
         payload = _extract_json_object(raw_output)
 
-        normalized_ru = payload.get("normalized_ru", "").strip() or normalized_query
+        rewritten_ru = payload.get("normalized_ru", "").strip() or normalized_query
+        if not _is_safe_russian_rewrite(normalized_query, rewritten_ru):
+            raise ValueError("LLM попыталась заменить слова в русском запросе; использован безопасный fallback.")
         normalized_en = normalize_english_text(payload.get("normalized_en", "").strip())
         search_prompt_en = normalize_english_text(payload.get("search_prompt_en", "").strip())
 
@@ -602,7 +637,7 @@ def rewrite_search_query(query: str) -> dict[str, str | bool]:
 
         result = QueryRewriteResult(
             original_query=normalized_query,
-            normalized_ru=normalized_ru,
+            normalized_ru=normalized_query,
             normalized_en=normalized_en,
             search_prompt_en=search_prompt_en,
             used_rewriter=True,
