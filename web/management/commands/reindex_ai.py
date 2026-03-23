@@ -5,7 +5,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from photo_ai import create_photo_index
+from nova_ai_shipping.runtime import create_photo_index
 from web.models import Photo
 
 

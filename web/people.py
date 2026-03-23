@@ -9,7 +9,7 @@ from django.db.models import Count, Prefetch
 from django.utils import timezone
 from sklearn.cluster import AgglomerativeClustering
 
-from photo_ai import extract_faces, get_face_runtime_config
+from nova_ai_shipping.faces import extract_faces, get_face_runtime_config
 from web.models import DetectedFace, Person, Photo
 
 

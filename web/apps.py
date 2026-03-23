@@ -6,6 +6,6 @@ class WebConfig(AppConfig):
     name = "web"
 
     def ready(self) -> None:
-        from photo_ai import load_ai_module
+        from nova_ai_shipping.runtime import load_ai_module
 
         load_ai_module()
