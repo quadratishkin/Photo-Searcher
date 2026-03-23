@@ -114,65 +114,28 @@ pnpm dev --host 0.0.0.0
 pnpm build
 ```
 
-## Docker-деплой для альфа-теста
+## Локальные данные
 
-Проект уже можно поднять в Docker как единый Django-сервис с локальным каталогом данных на хосте.
+Приложение хранит SQLite-базу и загруженные фотографии в каталоге `Local_DB` по умолчанию.
 
-Важная идея:
+При необходимости путь можно переопределить через `.env`:
 
-- SQLite база хранится вне контейнера,
-- загруженные фото хранятся вне контейнера,
-- контейнер использует bind mount каталога `Local_DB`,
-- реальные файлы будут лежать на Linux-хосте в `.../media/users/<username>/`.
-
-### Быстрый локальный запуск через Docker Compose
-
-```bash
-cp .env.example .env
-docker compose up -d --build
+```env
+LIQUID_PHOTOS_DATA_DIR=./Local_DB
+DJANGO_ALLOWED_HOSTS=*
+DJANGO_DEBUG=true
 ```
 
-По умолчанию:
-
-- приложение слушает `http://127.0.0.1:8000/`,
-- данные лежат в `./Local_DB`,
-- при старте создаётся пользователь `uploader`.
-
-### Что лежит в каталоге данных
-
-После первой загрузки фото структура будет такой:
+После загрузки фотографий структура данных будет такой:
 
 ```text
 Local_DB/
 ├── db.sqlite3
 └── media/
     └── users/
-        └── uploader/
+        └── <username>/
             └── <uuid>.jpg
 ```
-
-Это обычные файлы на хостовой машине, не внутри Docker volume-слоя.
-
-### Деплой на Linux-сервер
-
-Для сервера удобно задать абсолютный bind mount, например:
-
-```env
-LIQUID_PHOTOS_HOST_DATA_DIR=/srv/liquid-photos/data
-LIQUID_PHOTOS_PORT=8000
-DJANGO_ALLOWED_HOSTS=*
-DJANGO_DEBUG=true
-APP_DEFAULT_USERNAME=uploader
-APP_DEFAULT_PASSWORD=change-me-now
-```
-
-Тогда загруженные фотографии будут доступны на сервере в:
-
-```text
-/srv/liquid-photos/data/media/users/uploader/
-```
-
-Если регистрация в интерфейсе остаётся закрытой, тестировщики могут входить под общим аккаунтом из `.env`.
 
 ## Структура проекта
 
