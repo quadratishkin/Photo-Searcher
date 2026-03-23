@@ -58,7 +58,7 @@ ROOT_URLCONF = "liquid_photos.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [BACKEND_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
