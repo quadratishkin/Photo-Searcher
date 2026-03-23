@@ -9,14 +9,14 @@ from threading import Lock
 from typing import BinaryIO
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MODEL_NAME = "ViT-B-32"
 DEFAULT_PRETRAINED_TAG = "laion2b_s34b_b79k"
 DEFAULT_CAPTION_MODEL_NAME = "Salesforce/blip-image-captioning-base"
 DEFAULT_TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-ru-en"
 DEFAULT_COMPUTE_DEVICE = "auto"
 DEFAULT_QUERY_REWRITE_ENABLED = False
-DEFAULT_QUERY_REWRITE_MODEL_PATH = "CoreAI/models/query-rewriter/Qwen2.5-1.5B-Instruct-4bit"
+DEFAULT_QUERY_REWRITE_MODEL_PATH = "CoreAI/Models/query-rewriter/Qwen2.5-1.5B-Instruct-4bit"
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 RUSSIAN_TOKEN_PATTERN = re.compile(r"[a-zа-яё0-9-]+", re.IGNORECASE)
 JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)

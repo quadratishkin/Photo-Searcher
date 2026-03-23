@@ -8,10 +8,10 @@ SHIPPING_DIR_NAME = "CoreAI"
 
 
 def ensure_shipping_module_path() -> None:
-    shipping_dir = Path(__file__).resolve().parents[2] / SHIPPING_DIR_NAME
-    shipping_dir_str = str(shipping_dir)
-    if shipping_dir_str not in sys.path:
-        sys.path.insert(0, shipping_dir_str)
+    project_root = Path(__file__).resolve().parents[2]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
 
 ensure_shipping_module_path()

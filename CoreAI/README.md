@@ -8,7 +8,7 @@ This package is responsible for:
 - building normalized image embeddings for uploaded photos,
 - exposing runtime metadata for the Django backend.
 
-The Django app imports `nova_ai_shipping` directly after adding the
-`CoreAI` directory to `sys.path` during `liquid_photos` startup.
+The Django app imports `CoreAI` directly after adding the
+project root to `sys.path` during `liquid_photos` startup.
 Model weights are loaded only when the AI module is enabled in
 `CoreAI.config`.

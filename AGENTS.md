@@ -154,8 +154,10 @@ You do **not** need to force a specific AI stack unless the task requires it. If
   - `WebUI/src/styles.css`
   - `WebUI/public/demo`
 - `CoreAI/` contains the isolated AI runtime:
-  - `CoreAI/nova_ai_shipping/`
-  - `CoreAI/models/`
+  - `CoreAI/runtime.py`
+  - `CoreAI/faces.py`
+  - `CoreAI/embeddings.py`
+  - `CoreAI/Models/`
 - `CoreAI.config` controls AI runtime behavior.
 
 ### Current frontend stack

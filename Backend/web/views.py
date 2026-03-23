@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from nova_ai_shipping.runtime import (
+from CoreAI.runtime import (
     create_photo_index,
     create_text_embedding,
     get_ai_module_status,

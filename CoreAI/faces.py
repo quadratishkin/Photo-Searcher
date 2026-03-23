@@ -9,11 +9,11 @@ import numpy as np
 from PIL import Image
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_FILE_NAME = "CoreAI.config"
 DEFAULT_FACE_MODEL_PACK = "buffalo_l"
 DEFAULT_FACE_PROVIDER = "auto"
-DEFAULT_FACE_MODEL_ROOT = "CoreAI/models/insightface"
+DEFAULT_FACE_MODEL_ROOT = "CoreAI/Models/insightface"
 DEFAULT_FACE_DET_SIZE = 640
 DEFAULT_FACE_MIN_SCORE = 0.55
 DEFAULT_FACE_MIN_SIZE = 56
