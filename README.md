@@ -97,7 +97,7 @@ pnpm dev
 - запускает Django-сервер.
 
 ```bash
-python run_app.py
+python Backend/run_app.py
 ```
 
 По умолчанию приложение будет доступно на `http://127.0.0.1:8000/`.
@@ -141,11 +141,17 @@ Local_DB/
 
 ```text
 .
+├── Backend/
+│   ├── manage.py        # Django entrypoint
+│   ├── run_app.py       # сборка frontend + migrate + collectstatic + runserver
+│   ├── liquid_photos/   # Django project config
+│   └── web/             # backend app, API, models, people logic
 ├── public/demo/         # локальные demo-изображения для медиатеки и людей
 ├── src/
 │   ├── App.tsx          # основной UI-прототип
 │   ├── main.tsx         # точка входа React
 │   └── styles.css       # глобальные стили
+├── NovaAI-Shipping/     # отдельный AI-модуль
 ├── AGENTS.md            # контекст и правила для агента
 ├── package.json
 └── vite.config.ts

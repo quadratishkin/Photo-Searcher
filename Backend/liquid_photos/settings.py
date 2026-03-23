@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = BACKEND_DIR.parent
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -86,7 +87,7 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "frontend_build"]
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = BACKEND_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

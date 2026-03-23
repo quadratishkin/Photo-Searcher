@@ -6,16 +6,17 @@ import sys
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
 DEFAULT_BIND = "127.0.0.1:8000"
 
 
 def run_command(command: list[str]) -> None:
-    subprocess.run(["cmd", "/c", *command], cwd=BASE_DIR, check=True)
+    subprocess.run(["cmd", "/c", *command], cwd=PROJECT_ROOT, check=True)
 
 
 def ensure_frontend_dependencies() -> None:
-    if not (BASE_DIR / "node_modules").exists():
+    if not (PROJECT_ROOT / "node_modules").exists():
         run_command(["pnpm", "install"])
 
 
@@ -24,14 +25,15 @@ def build_frontend() -> None:
 
 
 def apply_migrations() -> None:
-    subprocess.run([sys.executable, "manage.py", "migrate", "--noinput"], cwd=BASE_DIR, check=True)
+    subprocess.run([sys.executable, "manage.py", "migrate", "--noinput"], cwd=BACKEND_DIR, check=True)
 
 
 def collect_static() -> None:
-    subprocess.run([sys.executable, "manage.py", "collectstatic", "--noinput"], cwd=BASE_DIR, check=True)
+    subprocess.run([sys.executable, "manage.py", "collectstatic", "--noinput"], cwd=BACKEND_DIR, check=True)
 
 
 def start_server(bind: str) -> None:
+    os.chdir(BACKEND_DIR)
     os.execv(
         sys.executable,
         [sys.executable, "manage.py", "runserver", bind],
