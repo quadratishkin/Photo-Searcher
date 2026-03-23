@@ -1,58 +1,58 @@
 # Liquid Photos
 
-Liquid Photos is a demo-oriented smart photo library for a university lab project about neural networks, semantic media retrieval, and person discovery in personal photo collections.
+Liquid Photos — это demo-ориентированная умная фотобиблиотека для университетской лабораторной работы по нейросетям, семантическому поиску по медиа и поиску людей на фотографиях.
 
-The project is now split into three clear parts:
+Сейчас проект разделён на три явные части:
 
-- `Backend/` — Django app, API, auth, uploads, local storage, people grouping
-- `WebUI/` — React 19 + TypeScript + Vite interface
-- `CoreAI/` — isolated AI runtime for embeddings, captions, query rewrite, and face extraction
+- `Backend/` — Django-приложение, API, авторизация, загрузка фото, локальное хранение, группировка людей
+- `WebUI/` — интерфейс на React 19 + TypeScript + Vite
+- `CoreAI/` — изолированный AI-модуль для эмбеддингов, подписей, query rewrite и извлечения лиц
 
-## Current State
+## Текущее состояние
 
-This repository is no longer a frontend-only prototype. It already contains a working local web application with:
+Этот репозиторий больше не является frontend-only прототипом. В нём уже есть рабочее локальное веб-приложение со следующими возможностями:
 
-- Django backend with session auth
-- photo upload and personal media library
-- semantic photo search API
-- person discovery / grouping API
-- people naming flow
-- React UI connected to backend endpoints
-- local SQLite database and local media storage
-- separate AI module bootstrap through `CoreAI.config`
+- Django backend с сессионной авторизацией
+- загрузка фотографий и личная медиатека
+- API семантического поиска по фото
+- API группировки и просмотра людей
+- переименование найденных людей
+- React-интерфейс, подключённый к backend endpoint-ам
+- локальная SQLite-база и локальное хранение медиа
+- отдельная инициализация AI-модуля через `CoreAI.config`
 
-Current product constraints are still demo-oriented:
+Проект по-прежнему ориентирован на учебный demo-сценарий:
 
-- small local dataset
-- low user count
-- local-first storage
-- understandable architecture over production complexity
+- небольшой локальный датасет
+- малое число пользователей
+- local-first хранение
+- понятная архитектура важнее production-сложности
 
-## Features
+## Возможности
 
-### Media Library
+### Медиатека
 
-- authenticated user photo library
-- square media grid UI
-- local image upload
-- photo deletion
+- личная библиотека фотографий пользователя
+- квадратная сетка изображений
+- локальная загрузка фото
+- удаление фотографий
 
-### Intelligent Search
+### Интеллектуальный поиск
 
-- natural-language search over uploaded photos
-- AI query rewrite / normalization
-- text embedding search
-- hybrid ranking with embedding similarity and caption token matches
+- поиск по фото на естественном языке
+- AI-нормализация и переписывание запроса
+- текстовые эмбеддинги для поиска
+- гибридное ранжирование по embedding similarity и caption token match
 
-### People
+### Люди
 
-- face extraction on uploaded photos
-- clustering of the same person across photos
-- people list with preview portraits
-- person rename flow
-- person-specific photo view
+- извлечение лиц из загруженных фотографий
+- кластеризация одного и того же человека между разными фото
+- список людей с preview-портретами
+- переименование человека
+- просмотр фото, относящихся к выбранному человеку
 
-## Tech Stack
+## Стек технологий
 
 ### Backend
 
@@ -67,9 +67,9 @@ Current product constraints are still demo-oriented:
 - React 19
 - TypeScript
 - Vite
-- plain CSS
+- обычный CSS
 
-### AI Module
+### AI-модуль
 
 - OpenCLIP
 - PyTorch
@@ -77,7 +77,7 @@ Current product constraints are still demo-oriented:
 - InsightFace
 - ONNX Runtime
 
-## Repository Layout
+## Структура репозитория
 
 ```text
 .
@@ -102,29 +102,29 @@ Current product constraints are still demo-oriented:
 └── AGENTS.md
 ```
 
-## Local Development
+## Локальная разработка
 
 ### Frontend
 
-Install dependencies:
+Установка зависимостей:
 
 ```bash
 cd WebUI && pnpm install
 ```
 
-Run Vite dev server:
+Запуск Vite dev server:
 
 ```bash
 cd WebUI && pnpm dev
 ```
 
-Run Vite on LAN:
+Запуск Vite в локальной сети:
 
 ```bash
 cd WebUI && pnpm dev --host 0.0.0.0
 ```
 
-Build production frontend bundle:
+Production-сборка frontend:
 
 ```bash
 cd WebUI && pnpm build
@@ -132,49 +132,49 @@ cd WebUI && pnpm build
 
 ### Backend
 
-Install Python dependencies into your environment:
+Установка Python-зависимостей в ваше окружение:
 
 ```bash
 pip install -r Backend/requirements.txt
 ```
 
-Run Django checks:
+Проверка Django:
 
 ```bash
 .venv/bin/python Backend/manage.py check
 ```
 
-Run migrations:
+Применение миграций:
 
 ```bash
 .venv/bin/python Backend/manage.py migrate
 ```
 
-Start the integrated app flow:
+Запуск интегрированного сценария приложения:
 
 ```bash
 python Backend/run_app.py
 ```
 
-That command:
+Эта команда:
 
-- ensures `WebUI` dependencies exist
-- builds the frontend bundle
-- applies migrations
-- runs `collectstatic`
-- starts Django on `http://127.0.0.1:8000/`
+- проверяет наличие зависимостей `WebUI`
+- собирает frontend bundle
+- применяет миграции
+- запускает `collectstatic`
+- стартует Django на `http://127.0.0.1:8000/`
 
-You can also run Django directly:
+При необходимости Django можно запускать напрямую:
 
 ```bash
 .venv/bin/python Backend/manage.py runserver 127.0.0.1:8000
 ```
 
-## Configuration
+## Конфигурация
 
-### Local Data
+### Локальные данные
 
-By default the app stores its SQLite database and uploaded files under `Local_DB/`.
+По умолчанию приложение хранит SQLite-базу и загруженные файлы в `Local_DB/`.
 
 ```env
 LIQUID_PHOTOS_DATA_DIR=./Local_DB
@@ -182,7 +182,7 @@ DJANGO_ALLOWED_HOSTS=*
 DJANGO_DEBUG=true
 ```
 
-Typical structure:
+Типичная структура:
 
 ```text
 Local_DB/
@@ -194,20 +194,20 @@ Local_DB/
             └── faces/
 ```
 
-### AI Runtime
+### AI runtime
 
-AI runtime behavior is controlled through `CoreAI.config`.
+Поведение AI-модуля настраивается через `CoreAI.config`.
 
-Important examples:
+Важные параметры:
 
 - `bEnableAiModule`
 - `bEnableFaceModule`
 - `sComputeDevice`
 - `sQueryRewriteModelPath`
 
-The Django app imports the AI module from `CoreAI/`, but the runtime itself lives inside the Python package `nova_ai_shipping`.
+Django импортирует AI-модуль из `CoreAI/`, но сам runtime-код живёт внутри Python-пакета `nova_ai_shipping`.
 
-## Main Backend Endpoints
+## Основные backend endpoint-ы
 
 - `GET /api/ai/status`
 - `GET /api/auth/me`
@@ -222,8 +222,8 @@ The Django app imports the AI module from `CoreAI/`, but the runtime itself live
 - `GET /api/people/<id>/photos`
 - `POST /api/people/<id>/rename`
 
-## Notes
+## Примечания
 
-- UI text should remain Russian by default
-- registration is currently closed in backend logic
-- `README` should be treated as current architecture guidance, not as a historical prototype note
+- пользовательский интерфейс должен оставаться русскоязычным по умолчанию
+- регистрация сейчас закрыта в backend-логике
+- `README.md` следует воспринимать как актуальное описание архитектуры, а не как историческую заметку о прототипе
