@@ -8,15 +8,16 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
+WEB_UI_DIR = PROJECT_ROOT / "WebUI"
 DEFAULT_BIND = "127.0.0.1:8000"
 
 
 def run_command(command: list[str]) -> None:
-    subprocess.run(["cmd", "/c", *command], cwd=PROJECT_ROOT, check=True)
+    subprocess.run(["cmd", "/c", *command], cwd=WEB_UI_DIR, check=True)
 
 
 def ensure_frontend_dependencies() -> None:
-    if not (PROJECT_ROOT / "node_modules").exists():
+    if not (WEB_UI_DIR / "node_modules").exists():
         run_command(["pnpm", "install"])
 
 

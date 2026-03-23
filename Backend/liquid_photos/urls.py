@@ -45,5 +45,5 @@ urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:
     urlpatterns += [
-        re_path(r"^demo/(?P<path>.*)$", serve, {"document_root": settings.BASE_DIR / "public" / "demo"}),
+        re_path(r"^demo/(?P<path>.*)$", serve, {"document_root": settings.BASE_DIR / "WebUI" / "public" / "demo"}),
     ]

@@ -11,4 +11,5 @@ __pycache__/
 *.pyc
 Local_DB/
 dev/
+Backend/staticfiles/
 NovaAI-Shipping/models/query-rewriter/

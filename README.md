@@ -78,13 +78,13 @@ Liquid Photos — это концепт умной фотобиблиотеки 
 ### Установка зависимостей
 
 ```bash
-pnpm install
+cd WebUI && pnpm install
 ```
 
 ### Запуск frontend dev-сервера
 
 ```bash
-pnpm dev
+cd WebUI && pnpm dev
 ```
 
 ### Запуск приложения через Python
@@ -105,13 +105,13 @@ python Backend/run_app.py
 ### Запуск с доступом по локальной сети
 
 ```bash
-pnpm dev --host 0.0.0.0
+cd WebUI && pnpm dev --host 0.0.0.0
 ```
 
 ### Production-сборка
 
 ```bash
-pnpm build
+cd WebUI && pnpm build
 ```
 
 ## Локальные данные
@@ -146,15 +146,17 @@ Local_DB/
 │   ├── run_app.py       # сборка frontend + migrate + collectstatic + runserver
 │   ├── liquid_photos/   # Django project config
 │   └── web/             # backend app, API, models, people logic
-├── public/demo/         # локальные demo-изображения для медиатеки и людей
-├── src/
-│   ├── App.tsx          # основной UI-прототип
-│   ├── main.tsx         # точка входа React
-│   └── styles.css       # глобальные стили
 ├── NovaAI-Shipping/     # отдельный AI-модуль
+├── WebUI/
+│   ├── public/demo/     # локальные demo-изображения для медиатеки и людей
+│   ├── src/
+│   │   ├── App.tsx      # основной UI-прототип
+│   │   ├── main.tsx     # точка входа React
+│   │   └── styles.css   # глобальные стили
+│   ├── package.json
+│   └── vite.config.ts
 ├── AGENTS.md            # контекст и правила для агента
-├── package.json
-└── vite.config.ts
+└── templates/
 ```
 
 ## Визуальное направление
