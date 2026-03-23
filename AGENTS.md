@@ -4,7 +4,7 @@
 
 Liquid Photos is a university lab project focused on neural networks and intelligent media retrieval.
 
-This is a **web-based smart photo library** built with **Python + Django** in a **client-server architecture**. Users can register, log in, and upload their own photos/images to a personal library. The server stores files locally and processes them to support intelligent search and person grouping.
+This is a **web-based smart photo library** built with **Python + Django** in a **client-server architecture**. Users can log in, upload their own photos into a personal library, run natural-language search, and browse automatically grouped people.
 
 This is **not** a commercial-scale product. It is a **demo-oriented academic project** whose success is measured mainly by:
 
@@ -67,11 +67,11 @@ Assume the following unless the repository clearly defines otherwise:
 
 - Backend: **Python + Django**
 - Architecture: **client-server web app**
-- Database: prefer **PostgreSQL**
+- Database: **SQLite** in local storage
 - File storage: **local disk**
-- Runtime target: **Windows**
-- GPU target: **NVIDIA CUDA**
-- CPU fallback: **not required**
+- Frontend: **React 19 + TypeScript + Vite**
+- AI runtime: separate **CoreAI/** module imported by Django
+- Runtime environment in this repo: local development on the user's machine
 - Scale: **small demo**, around **200–300 photos**
 - User count: **very low**
 - Search latency target on indexed data: roughly **1–2 seconds**
@@ -126,9 +126,7 @@ You do **not** need to force a specific AI stack unless the task requires it. If
 
 ---
 
-## Current Frontend State
-
-As of March 9, 2026, the repository already contains a **frontend-only UI concept** for the demo.
+## Current Repository State
 
 ### Language rules
 
@@ -143,7 +141,24 @@ As of March 9, 2026, the repository already contains a **frontend-only UI concep
   - technical comments when they are clearer in English.
 - When there is a conflict, prioritize **Russian for product/UI text** and **clarity for technical implementation details**.
 
-### Frontend stack currently in use
+### Current architecture
+
+- `Backend/` contains the active Django backend:
+  - `Backend/manage.py`
+  - `Backend/liquid_photos/`
+  - `Backend/web/`
+- `WebUI/` contains the active React/Vite frontend:
+  - `WebUI/package.json`
+  - `WebUI/index.html`
+  - `WebUI/src/App.tsx`
+  - `WebUI/src/styles.css`
+  - `WebUI/public/demo`
+- `CoreAI/` contains the isolated AI runtime:
+  - `CoreAI/nova_ai_shipping/`
+  - `CoreAI/models/`
+- `CoreAI.config` controls AI runtime behavior.
+
+### Current frontend stack
 
 - **React 19**
 - **TypeScript**
@@ -152,16 +167,20 @@ As of March 9, 2026, the repository already contains a **frontend-only UI concep
 
 ### Current implementation status
 
-- The current repo is **not yet a Django app**.
-- It is a **standalone frontend prototype** used to iterate on design and interaction before backend integration.
-- Main entry points:
-  - `package.json`
-  - `index.html`
-  - `src/App.tsx`
-  - `src/styles.css`
-- Demo images are stored locally under:
-  - `public/demo/media`
-  - `public/demo/people`
+- The repo already contains a working Django app and API.
+- The UI is no longer standalone; it is wired to backend endpoints.
+- The backend already supports:
+  - login/logout session auth,
+  - photo upload,
+  - photo listing,
+  - semantic search,
+  - people clustering,
+  - person rename,
+  - AI runtime status reporting.
+- Registration is currently disabled in backend logic for alpha/demo use.
+- Demo images are stored under:
+  - `WebUI/public/demo/media`
+  - `WebUI/public/demo/people`
 
 ### Implemented UI concept
 
@@ -183,19 +202,35 @@ As of March 9, 2026, the repository already contains a **frontend-only UI concep
 
 - The top-right `+` button opens the system image/file picker via a hidden `input[type="file"]`.
 - Selected file count is shown in a temporary glass-style toast.
-- Search input is already interactive, but search logic is still mock/demo-only.
+- Search, people, auth, and media flows already call the real Django backend.
+
+### Current backend shape
+
+- Main API/UI entrypoints:
+  - `Backend/liquid_photos/settings.py`
+  - `Backend/liquid_photos/urls.py`
+  - `Backend/web/views.py`
+  - `Backend/web/models.py`
+  - `Backend/web/people.py`
+- Main persisted entities:
+  - `Photo`
+  - `Person`
+  - `DetectedFace`
+- AI code is not supposed to be mixed into backend refactors unless the task explicitly targets `CoreAI/`.
 
 ### Local development workflow
 
-- Install deps with `pnpm install`
-- Run dev server with `pnpm dev`
-- Production build check with `pnpm build`
+- Frontend deps: `cd WebUI && pnpm install`
+- Frontend dev server: `cd WebUI && pnpm dev`
+- Frontend production build: `cd WebUI && pnpm build`
+- Backend checks: `.venv/bin/python Backend/manage.py check`
+- Full integrated startup: `python Backend/run_app.py`
 
 ### Local network preview
 
 For testing on other devices in the same LAN, run Vite with host binding enabled:
 
-- `pnpm dev --host 0.0.0.0`
+- `cd WebUI && pnpm dev --host 0.0.0.0`
 
 Typical LAN URL on this Mac during the current setup:
 
@@ -221,8 +256,9 @@ Start with the smallest useful set of information:
 1. Inspect repository structure at a high level.
 2. Read key project files only:
    - `README*`
-   - dependency/manifests (`pyproject.toml`, `requirements.txt`, `package.json`, etc.)
+   - dependency/manifests (`Backend/requirements.txt`, `WebUI/package.json`, etc.)
    - main Django settings / app config / routes
+   - `CoreAI.config` if the task touches AI behavior
    - top-level docs or architecture notes, if they exist
 3. Inspect recent git history:
    - current branch
@@ -338,7 +374,7 @@ Examples:
 
 If a task changes Python code in this repository, the agent must run:
 
-- `python manage.py check`
+- `.venv/bin/python Backend/manage.py check`
 
 before finishing the task, and confirm that the command reports no errors.
 
@@ -368,6 +404,10 @@ Before finishing the task, the agent must ensure that:
 - the old server process is no longer active,
 - the current server process is serving the new code,
 - live HTTP verification is performed against that restarted server.
+
+For this repository, the expected command shape is:
+
+- `.venv/bin/python Backend/manage.py runserver 127.0.0.1:8000 --noreload`
 
 In your final task report, clearly distinguish:
 - what you changed,

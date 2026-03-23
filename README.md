@@ -1,124 +1,180 @@
 # Liquid Photos
 
-Тестовая правка для проверки commit/push из Codex.
+Liquid Photos is a demo-oriented smart photo library for a university lab project about neural networks, semantic media retrieval, and person discovery in personal photo collections.
 
-Liquid Photos — это концепт умной фотобиблиотеки для университетской лабораторной работы, посвящённой нейросетям, интеллектуальному поиску по медиа и demo-ready интерфейсам.
+The project is now split into three clear parts:
 
-Цель проекта — создать веб-приложение, в котором пользователь сможет:
+- `Backend/` — Django app, API, auth, uploads, local storage, people grouping
+- `WebUI/` — React 19 + TypeScript + Vite interface
+- `CoreAI/` — isolated AI runtime for embeddings, captions, query rewrite, and face extraction
 
-- загружать и просматривать личную фотобиблиотеку,
-- искать фотографии с помощью естественного языка,
-- находить и группировать людей на снимках,
-- взаимодействовать с системой через чистый современный интерфейс в стиле Liquid Glass.
+## Current State
 
-## Текущее состояние
+This repository is no longer a frontend-only prototype. It already contains a working local web application with:
 
-Сейчас репозиторий содержит **frontend-прототип**, который используется для проектирования интерфейса и проверки пользовательских сценариев до подключения backend-части.
+- Django backend with session auth
+- photo upload and personal media library
+- semantic photo search API
+- person discovery / grouping API
+- people naming flow
+- React UI connected to backend endpoints
+- local SQLite database and local media storage
+- separate AI module bootstrap through `CoreAI.config`
 
-Уже реализовано:
+Current product constraints are still demo-oriented:
 
-- полноэкранная галерея медиа,
-- нижняя навигация по вкладкам `Медиа`, `Поиск` и `Люди`,
-- интерактивное поле поиска,
-- вкладка `Люди` с сеткой круглых портретов,
-- верхние action-кнопки для перехода в поиск и выбора фото,
-- локальные demo-изображения для стабильного просмотра на других устройствах в сети.
+- small local dataset
+- low user count
+- local-first storage
+- understandable architecture over production complexity
 
-Логика backend для аутентификации, загрузки, индексации, семантического поиска и кластеризации людей ещё не реализована в этом репозитории.
+## Features
 
-## Возможности
+### Media Library
 
-### Медиатека
+- authenticated user photo library
+- square media grid UI
+- local image upload
+- photo deletion
 
-- квадратная сетка фотографий,
-- fullscreen-подача в стиле мобильной галереи,
-- точка входа для загрузки фото прямо из интерфейса.
+### Intelligent Search
 
-### Умный поиск
+- natural-language search over uploaded photos
+- AI query rewrite / normalization
+- text embedding search
+- hybrid ranking with embedding similarity and caption token matches
 
-- концепт поиска по фото на естественном языке,
-- редактируемое поле ввода запроса,
-- подготовленный layout для будущих AI-результатов.
+### People
 
-### Люди
+- face extraction on uploaded photos
+- clustering of the same person across photos
+- people list with preview portraits
+- person rename flow
+- person-specific photo view
 
-- экран с найденными людьми,
-- круглые карточки-портреты,
-- место для именованных и неименованных групп людей.
+## Tech Stack
 
-## Технологии
+### Backend
 
-Текущий frontend-стек:
+- Python
+- Django 5.2
+- SQLite
+- Pillow
+- scikit-learn
 
-- **React 19**
-- **TypeScript**
-- **Vite**
-- **CSS**
+### Web UI
 
-Планируемое общее направление проекта:
+- React 19
+- TypeScript
+- Vite
+- plain CSS
 
-- **Python**
-- **Django**
-- локальное хранение изображений
-- AI-пайплайн для поиска и группировки людей
+### AI Module
 
-## Цели проекта
+- OpenCLIP
+- PyTorch
+- Transformers
+- InsightFace
+- ONNX Runtime
 
-Основные приоритеты Liquid Photos:
+## Repository Layout
 
-1. качество интеллектуального поиска по фото,
-2. заметная demo-ready функциональность,
-3. понятная архитектура,
-4. чистый и убедительный интерфейс.
+```text
+.
+├── Backend/
+│   ├── manage.py
+│   ├── requirements.txt
+│   ├── run_app.py
+│   ├── liquid_photos/
+│   └── web/
+├── CoreAI/
+│   ├── nova_ai_shipping/
+│   └── models/
+├── WebUI/
+│   ├── package.json
+│   ├── pnpm-lock.yaml
+│   ├── vite.config.ts
+│   ├── public/demo/
+│   └── src/
+├── CoreAI.config
+├── Local_DB/
+├── templates/
+└── AGENTS.md
+```
 
-Это учебный demo-проект, а не production-платформа.
+## Local Development
 
-## Быстрый старт
+### Frontend
 
-### Установка зависимостей
+Install dependencies:
 
 ```bash
 cd WebUI && pnpm install
 ```
 
-### Запуск frontend dev-сервера
+Run Vite dev server:
 
 ```bash
 cd WebUI && pnpm dev
 ```
 
-### Запуск приложения через Python
-
-Эта команда:
-
-- при необходимости использует уже установленные frontend-зависимости,
-- пересобирает React-интерфейс,
-- применяет миграции SQLite,
-- запускает Django-сервер.
-
-```bash
-python Backend/run_app.py
-```
-
-По умолчанию приложение будет доступно на `http://127.0.0.1:8000/`.
-
-### Запуск с доступом по локальной сети
+Run Vite on LAN:
 
 ```bash
 cd WebUI && pnpm dev --host 0.0.0.0
 ```
 
-### Production-сборка
+Build production frontend bundle:
 
 ```bash
 cd WebUI && pnpm build
 ```
 
-## Локальные данные
+### Backend
 
-Приложение хранит SQLite-базу и загруженные фотографии в каталоге `Local_DB` по умолчанию.
+Install Python dependencies into your environment:
 
-При необходимости путь можно переопределить через `.env`:
+```bash
+pip install -r Backend/requirements.txt
+```
+
+Run Django checks:
+
+```bash
+.venv/bin/python Backend/manage.py check
+```
+
+Run migrations:
+
+```bash
+.venv/bin/python Backend/manage.py migrate
+```
+
+Start the integrated app flow:
+
+```bash
+python Backend/run_app.py
+```
+
+That command:
+
+- ensures `WebUI` dependencies exist
+- builds the frontend bundle
+- applies migrations
+- runs `collectstatic`
+- starts Django on `http://127.0.0.1:8000/`
+
+You can also run Django directly:
+
+```bash
+.venv/bin/python Backend/manage.py runserver 127.0.0.1:8000
+```
+
+## Configuration
+
+### Local Data
+
+By default the app stores its SQLite database and uploaded files under `Local_DB/`.
 
 ```env
 LIQUID_PHOTOS_DATA_DIR=./Local_DB
@@ -126,7 +182,7 @@ DJANGO_ALLOWED_HOSTS=*
 DJANGO_DEBUG=true
 ```
 
-После загрузки фотографий структура данных будет такой:
+Typical structure:
 
 ```text
 Local_DB/
@@ -134,49 +190,40 @@ Local_DB/
 └── media/
     └── users/
         └── <username>/
-            └── <uuid>.jpg
+            ├── <uuid>.jpg
+            └── faces/
 ```
 
-## Структура проекта
+### AI Runtime
 
-```text
-.
-├── Backend/
-│   ├── manage.py        # Django entrypoint
-│   ├── run_app.py       # сборка frontend + migrate + collectstatic + runserver
-│   ├── liquid_photos/   # Django project config
-│   └── web/             # backend app, API, models, people logic
-├── CoreAI/              # отдельный AI-модуль
-├── WebUI/
-│   ├── public/demo/     # локальные demo-изображения для медиатеки и людей
-│   ├── src/
-│   │   ├── App.tsx      # основной UI-прототип
-│   │   ├── main.tsx     # точка входа React
-│   │   └── styles.css   # глобальные стили
-│   ├── package.json
-│   └── vite.config.ts
-├── AGENTS.md            # контекст и правила для агента
-└── templates/
-```
+AI runtime behavior is controlled through `CoreAI.config`.
 
-## Визуальное направление
+Important examples:
 
-Интерфейс проектируется под влияние:
+- `bEnableAiModule`
+- `bEnableFaceModule`
+- `sComputeDevice`
+- `sQueryRewriteModelPath`
 
-- Apple-like Liquid Glass поверхностей,
-- мобильных фотогалерей,
-- минималистичных AI-search интерфейсов.
+The Django app imports the AI module from `CoreAI/`, but the runtime itself lives inside the Python package `nova_ai_shipping`.
 
-Сейчас основной фокус — визуальный язык и пользовательский flow, а уже затем интеграция backend-логики.
+## Main Backend Endpoints
 
-## Roadmap
+- `GET /api/ai/status`
+- `GET /api/auth/me`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `POST /api/auth/register`
+- `GET /api/photos`
+- `POST /api/photos/upload`
+- `POST /api/photos/search`
+- `POST /api/photos/<id>/delete`
+- `GET /api/people`
+- `GET /api/people/<id>/photos`
+- `POST /api/people/<id>/rename`
 
-- добавить экраны входа и регистрации,
-- подключить загрузку фото к backend,
-- реализовать API семантического поиска,
-- реализовать поиск и группировку людей,
-- связать реальные результаты поиска и людей с frontend-интерфейсом.
+## Notes
 
-## Статус
-
-Проект разрабатывается как учебная лабораторная работа и находится в активной стадии прототипирования.
+- UI text should remain Russian by default
+- registration is currently closed in backend logic
+- `README` should be treated as current architecture guidance, not as a historical prototype note
