@@ -12,4 +12,4 @@ __pycache__/
 Local_DB/
 dev/
 Backend/staticfiles/
-NovaAI-Shipping/models/query-rewriter/
+CoreAI/models/query-rewriter/

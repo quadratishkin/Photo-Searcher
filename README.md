@@ -146,7 +146,7 @@ Local_DB/
 │   ├── run_app.py       # сборка frontend + migrate + collectstatic + runserver
 │   ├── liquid_photos/   # Django project config
 │   └── web/             # backend app, API, models, people logic
-├── NovaAI-Shipping/     # отдельный AI-модуль
+├── CoreAI/              # отдельный AI-модуль
 ├── WebUI/
 │   ├── public/demo/     # локальные demo-изображения для медиатеки и людей
 │   ├── src/

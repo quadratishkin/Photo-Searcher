@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-SHIPPING_DIR_NAME = "NovaAI-Shipping"
+SHIPPING_DIR_NAME = "CoreAI"
 
 
 def ensure_shipping_module_path() -> None:
