@@ -37,7 +37,7 @@ def start_server(bind: str) -> None:
     os.chdir(BACKEND_DIR)
     os.execv(
         sys.executable,
-        [sys.executable, "manage.py", "runserver", bind],
+        [sys.executable, "manage.py", "runserver", bind, "--noreload"],
     )
 
 

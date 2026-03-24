@@ -178,7 +178,7 @@ python Backend/run_app.py
 При необходимости Django можно запускать напрямую:
 
 ```bash
-.venv/bin/python Backend/manage.py runserver 127.0.0.1:8000
+.venv/bin/python Backend/manage.py runserver 127.0.0.1:8000 --noreload
 ```
 
 ## Конфигурация
