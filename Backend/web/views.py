@@ -30,10 +30,28 @@ User = get_user_model()
 ALPHA_REGISTRATION_CLOSED_MESSAGE = "Регистрация на альфа-тест новых пользователей временно не производится."
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 SEARCH_RESULTS_LIMIT = 10
-CAPTION_SCORE_WEIGHT = 0.35
-EMBEDDING_SCORE_WEIGHT = 0.55
-TOKEN_BONUS_WEIGHT = 0.10
+CAPTION_SCORE_WEIGHT = 0.22
+EMBEDDING_SCORE_WEIGHT = 0.72
+TOKEN_BONUS_WEIGHT = 0.06
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+QUERY_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "near",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+}
 logger = logging.getLogger("liquid_photos.search")
 
 
@@ -94,7 +112,7 @@ def extract_query_tokens(text: str) -> list[str]:
     unique_tokens: list[str] = []
     seen_tokens: set[str] = set()
     for token in tokens:
-        if len(token) <= 1 or token in seen_tokens:
+        if len(token) <= 1 or token in QUERY_STOP_WORDS or token in seen_tokens:
             continue
         seen_tokens.add(token)
         unique_tokens.append(token)
