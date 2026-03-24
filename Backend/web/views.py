@@ -604,9 +604,9 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
 
     created_photos: list[Photo] = []
     face_index_warning = ""
-    with transaction.atomic():
-        for uploaded_file, photo_index in indexed_uploads:
-            embedding_result = photo_index["embedding"]
+    for uploaded_file, photo_index in indexed_uploads:
+        embedding_result = photo_index["embedding"]
+        with transaction.atomic():
             photo = Photo(
                 user=request.user,
                 original_filename=uploaded_file.name,
@@ -626,13 +626,14 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
             )
             photo.image.save(uploaded_file.name, uploaded_file, save=False)
             photo.save()
-            created_photos.append(photo)
-            try:
-                uploaded_file.seek(0)
-                index_photo_faces(photo, uploaded_file)
-            except Exception as exc:
-                if not face_index_warning:
-                    face_index_warning = f"Группировка лиц временно недоступна: {exc}"
+
+        created_photos.append(photo)
+        try:
+            uploaded_file.seek(0)
+            index_photo_faces(photo, uploaded_file)
+        except Exception as exc:
+            if not face_index_warning:
+                face_index_warning = f"Группировка лиц временно недоступна: {exc}"
 
     cluster_error = ""
     try:
