@@ -34,4 +34,4 @@ echo "Собираем static..."
 
 echo "Запускаем Django на http://$HOST_AND_PORT/"
 cd "$BACKEND_DIR"
-exec "$VENV_PYTHON" manage.py runserver "$HOST_AND_PORT"
+exec "$VENV_PYTHON" manage.py runserver "$HOST_AND_PORT" --noreload
