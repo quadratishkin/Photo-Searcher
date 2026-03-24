@@ -122,6 +122,44 @@ def score_caption_match(query_tokens: list[str], caption_tokens: object) -> tupl
     return match_ratio, token_bonus
 
 
+def normalize_person_name(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().casefold())
+
+
+def find_person_match(user, query: str) -> tuple[Person | None, str]:
+    normalized_query = normalize_person_name(query)
+    if not normalized_query:
+        return None, query.strip()
+
+    best_match: Person | None = None
+    best_span: tuple[int, int] | None = None
+    best_name_length = -1
+
+    for person in Person.objects.filter(user=user).exclude(display_name="").only("id", "display_name"):
+        display_name = str(person.display_name).strip()
+        normalized_name = normalize_person_name(display_name)
+        if not normalized_name:
+            continue
+
+        pattern = re.compile(rf"(?<!\w){re.escape(normalized_name)}(?!\w)")
+        match = pattern.search(normalized_query)
+        if match is None:
+            continue
+
+        if len(normalized_name) > best_name_length:
+            best_match = person
+            best_span = match.span()
+            best_name_length = len(normalized_name)
+
+    if best_match is None or best_span is None:
+        return None, query.strip()
+
+    query_without_name = normalize_person_name(
+        f"{normalized_query[: best_span[0]]} {normalized_query[best_span[1] :]}"
+    )
+    return best_match, query_without_name
+
+
 @ensure_csrf_cookie
 def index(request: HttpRequest):
     return render(request, "index.html")
@@ -273,6 +311,7 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     if not query:
         return JsonResponse({"message": "Введите текстовый запрос для поиска."}, status=400)
 
+    matched_person, semantic_query = find_person_match(request.user, query)
     logger.info("photo_search.request user=%s query=%r", request.user.get_username(), query)
 
     try:
@@ -287,26 +326,37 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     expected_model_name = str(engine_metadata["model_name"])
     expected_pretrained_tag = str(engine_metadata["pretrained_tag"])
     expected_dimension = int(engine_metadata["embedding_dimension"])
-    try:
-        rewrite_debug = rewrite_search_query(query)
-    except Exception:
+    rewrite_debug = {
+        "original_query": query,
+        "normalized_ru": query.strip(),
+        "normalized_en": "",
+        "search_prompt_en": "",
+        "used_rewriter": False,
+        "fallback_reason": "",
+    }
+    if semantic_query:
         try:
-            translated_query = translate_text_to_english(query)
+            rewrite_debug = rewrite_search_query(semantic_query)
         except Exception:
-            translated_query = query.strip().lower()
-        rewrite_debug = {
-            "original_query": query,
-            "normalized_ru": query.strip(),
-            "normalized_en": translated_query,
-            "search_prompt_en": translated_query,
-            "used_rewriter": False,
-            "fallback_reason": "rewrite_search_query недоступен; использован обычный перевод.",
-        }
+            try:
+                translated_query = translate_text_to_english(semantic_query)
+            except Exception:
+                translated_query = semantic_query.strip().lower()
+            rewrite_debug = {
+                "original_query": query,
+                "normalized_ru": semantic_query.strip(),
+                "normalized_en": translated_query,
+                "search_prompt_en": translated_query,
+                "used_rewriter": False,
+                "fallback_reason": "rewrite_search_query недоступен; использован обычный перевод.",
+            }
 
     logger.info(
-        "photo_search.interpreted user=%s query=%r normalized_ru=%r normalized_en=%r prompt=%r rewriter_used=%s fallback_reason=%r model=%s/%s dim=%s",
+        "photo_search.interpreted user=%s query=%r semantic_query=%r matched_person=%r normalized_ru=%r normalized_en=%r prompt=%r rewriter_used=%s fallback_reason=%r model=%s/%s dim=%s",
         request.user.get_username(),
         query,
+        semantic_query,
+        matched_person.display_name if matched_person else "",
         str(rewrite_debug["normalized_ru"]),
         str(rewrite_debug["normalized_en"]),
         str(rewrite_debug["search_prompt_en"]),
@@ -321,8 +371,12 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     search_prompt_en = str(rewrite_debug["search_prompt_en"])
     english_query_tokens = extract_query_tokens(search_prompt_en)
 
+    indexed_photos_queryset = Photo.objects.filter(user=request.user, embedding_dimension__gt=0)
+    if matched_person is not None:
+        indexed_photos_queryset = indexed_photos_queryset.filter(detected_faces__person=matched_person).distinct()
+
     indexed_photos = list(
-        Photo.objects.filter(user=request.user, embedding_dimension__gt=0)
+        indexed_photos_queryset
         .only(
             "id",
             "image",
@@ -341,39 +395,58 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         )
     )
     if not indexed_photos:
-        logger.info("photo_search.no_indexed_photos user=%s query=%r", request.user.get_username(), query)
+        logger.info(
+            "photo_search.no_indexed_photos user=%s query=%r matched_person=%r",
+            request.user.get_username(),
+            query,
+            matched_person.display_name if matched_person else "",
+        )
+        person_message = ""
+        if matched_person is not None:
+            person_message = f" Для человека «{matched_person.display_name}» пока нет проиндексированных фото."
         return JsonResponse(
             {
                 "query": query,
+                "semanticQuery": semantic_query,
                 "photos": [],
                 "totalIndexedPhotos": 0,
-                "message": "В вашей медиатеке пока нет проиндексированных фото для семантического поиска.",
+                "matchedPerson": (
+                    {
+                        "id": matched_person.id,
+                        "displayName": matched_person.display_name,
+                    }
+                    if matched_person is not None
+                    else None
+                ),
+                "message": f"В вашей медиатеке пока нет проиндексированных фото для семантического поиска.{person_message}",
             }
         )
 
-    try:
-        text_embedding = create_text_embedding(search_prompt_en)
-    except ValueError as exc:
-        logger.warning(
-            "photo_search.invalid_query user=%s query=%r prompt=%r",
-            request.user.get_username(),
-            query,
-            search_prompt_en,
-        )
-        return JsonResponse({"message": str(exc)}, status=400)
-    except Exception as exc:
-        logger.exception(
-            "photo_search.embedding_failed user=%s query=%r prompt=%r",
-            request.user.get_username(),
-            query,
-            search_prompt_en,
-        )
-        return JsonResponse(
-            {"message": f"Не удалось построить embedding для текстового запроса: {exc}"},
-            status=500,
-        )
+    query_vector: list[float] | None = None
+    if search_prompt_en:
+        try:
+            text_embedding = create_text_embedding(search_prompt_en)
+        except ValueError as exc:
+            logger.warning(
+                "photo_search.invalid_query user=%s query=%r prompt=%r",
+                request.user.get_username(),
+                query,
+                search_prompt_en,
+            )
+            return JsonResponse({"message": str(exc)}, status=400)
+        except Exception as exc:
+            logger.exception(
+                "photo_search.embedding_failed user=%s query=%r prompt=%r",
+                request.user.get_username(),
+                query,
+                search_prompt_en,
+            )
+            return JsonResponse(
+                {"message": f"Не удалось построить embedding для текстового запроса: {exc}"},
+                status=500,
+            )
 
-    query_vector = list(text_embedding["vector"])
+        query_vector = list(text_embedding["vector"])
     search_hits: list[tuple[float, Photo, dict[str, float | str]]] = []
     skipped_photos = 0
 
@@ -391,13 +464,13 @@ def photo_search(request: HttpRequest) -> JsonResponse:
             skipped_photos += 1
             continue
 
-        similarity = dot_product(query_vector, photo.embedding_vector)
+        similarity = dot_product(query_vector, photo.embedding_vector) if query_vector is not None else 0.0
         caption_match_ratio, token_bonus = score_caption_match(english_query_tokens, photo.caption_tokens)
         hybrid_score = (
             (similarity * EMBEDDING_SCORE_WEIGHT)
             + (caption_match_ratio * CAPTION_SCORE_WEIGHT)
             + (token_bonus * TOKEN_BONUS_WEIGHT)
-        )
+        ) if query_vector is not None else 1.0
         debug_meta = {
             "embeddingScore": round(similarity, 6),
             "captionScore": round(caption_match_ratio, 6),
@@ -407,6 +480,7 @@ def photo_search(request: HttpRequest) -> JsonResponse:
             "searchPromptEn": search_prompt_en,
             "queryRewriterUsed": bool(rewrite_debug["used_rewriter"]),
             "queryRewriteFallbackReason": str(rewrite_debug["fallback_reason"]),
+            "matchedPersonName": matched_person.display_name if matched_person else "",
         }
         search_hits.append((hybrid_score, photo, debug_meta))
 
@@ -422,9 +496,18 @@ def photo_search(request: HttpRequest) -> JsonResponse:
         return JsonResponse(
             {
                 "query": query,
+                "semanticQuery": semantic_query,
                 "photos": [],
                 "totalIndexedPhotos": len(indexed_photos),
                 "skippedPhotos": skipped_photos,
+                "matchedPerson": (
+                    {
+                        "id": matched_person.id,
+                        "displayName": matched_person.display_name,
+                    }
+                    if matched_person is not None
+                    else None
+                ),
                 "message": "Не найдено ни одного фото с валидным embedding-индексом для текущей AI-модели.",
             }
         )
@@ -456,11 +539,20 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "query": query,
+            "semanticQuery": semantic_query,
             "translatedQuery": translated_query,
             "normalizedRu": str(rewrite_debug["normalized_ru"]),
             "searchPromptEn": search_prompt_en,
             "queryRewriterUsed": bool(rewrite_debug["used_rewriter"]),
             "queryRewriteFallbackReason": str(rewrite_debug["fallback_reason"]),
+            "matchedPerson": (
+                {
+                    "id": matched_person.id,
+                    "displayName": matched_person.display_name,
+                }
+                if matched_person is not None
+                else None
+            ),
             "photos": [
                 {**serialize_search_hit(photo, score), **debug_meta}
                 for score, photo, debug_meta in top_hits
