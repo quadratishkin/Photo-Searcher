@@ -9,11 +9,11 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
 WEB_UI_DIR = PROJECT_ROOT / "WebUI"
-DEFAULT_BIND = "127.0.0.1:8000"
+DEFAULT_BIND = "0.0.0.0:8000"
 
 
 def run_command(command: list[str]) -> None:
-    subprocess.run(["cmd", "/c", *command], cwd=WEB_UI_DIR, check=True)
+    subprocess.run(command, cwd=WEB_UI_DIR, check=True)
 
 
 def ensure_frontend_dependencies() -> None:
