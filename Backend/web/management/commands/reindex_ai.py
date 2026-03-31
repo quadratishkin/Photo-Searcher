@@ -29,7 +29,7 @@ class Command(BaseCommand):
             queryset = queryset.filter(id=photo_id)
 
         if options.get("only_missing"):
-            queryset = queryset.filter(caption_en="") | queryset.filter(embedding_dimension=0)
+            queryset = queryset.filter(caption_en="") | queryset.filter(caption_ru="") | queryset.filter(embedding_dimension=0)
             queryset = queryset.order_by("id")
 
         limit = options.get("limit")
@@ -60,7 +60,13 @@ class Command(BaseCommand):
             photo.embedding_created_at = timezone.now()
             photo.caption_model = str(index_data["caption_model_name"])
             photo.caption_en = str(index_data["caption_en"])
+            photo.caption_ru = str(index_data.get("caption_ru", ""))
+            photo.caption_ru_synonyms = list(index_data.get("caption_ru_synonyms", []))
             photo.caption_tokens = list(index_data["caption_tokens"])
+            photo.search_terms_ru = list(index_data.get("search_terms_ru", []))
+            photo.search_terms_en = list(index_data.get("search_terms_en", []))
+            photo.search_synonyms_ru = list(index_data.get("search_synonyms_ru", []))
+            photo.entity_payload = dict(index_data.get("entity_payload", {}))
             photo.caption_created_at = timezone.now()
             photo.processing_status = "indexed"
             photo.save(
@@ -72,7 +78,13 @@ class Command(BaseCommand):
                     "embedding_created_at",
                     "caption_model",
                     "caption_en",
+                    "caption_ru",
+                    "caption_ru_synonyms",
                     "caption_tokens",
+                    "search_terms_ru",
+                    "search_terms_en",
+                    "search_synonyms_ru",
+                    "entity_payload",
                     "caption_created_at",
                     "processing_status",
                     "updated_at",

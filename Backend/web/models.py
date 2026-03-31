@@ -38,7 +38,13 @@ class Photo(models.Model):
     embedding_created_at = models.DateTimeField(null=True, blank=True)
     caption_model = models.CharField(max_length=120, blank=True)
     caption_en = models.TextField(blank=True)
+    caption_ru = models.TextField(blank=True)
+    caption_ru_synonyms = models.JSONField(default=list, blank=True)
     caption_tokens = models.JSONField(default=list, blank=True)
+    search_terms_ru = models.JSONField(default=list, blank=True)
+    search_terms_en = models.JSONField(default=list, blank=True)
+    search_synonyms_ru = models.JSONField(default=list, blank=True)
+    entity_payload = models.JSONField(default=dict, blank=True)
     caption_created_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -83,3 +89,20 @@ class DetectedFace(models.Model):
 
     def __str__(self) -> str:
         return f"Face #{self.pk} for photo #{self.photo_id}"
+
+
+class TelegramProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="telegram_profile")
+    telegram_user_id = models.BigIntegerField(unique=True)
+    telegram_chat_id = models.BigIntegerField(unique=True)
+    telegram_username = models.CharField(max_length=255, blank=True)
+    telegram_first_name = models.CharField(max_length=255, blank=True)
+    telegram_last_name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return self.telegram_username or f"Telegram {self.telegram_user_id}"

@@ -1,4 +1,5 @@
 from .embeddings import (
+    analyze_search_query,
     configure_runtime,
     create_image_embedding,
     create_photo_index,
@@ -26,6 +27,7 @@ __all__ = [
     "create_image_embedding",
     "create_photo_index",
     "create_text_embedding",
+    "analyze_search_query",
     "extract_faces",
     "get_ai_module_status",
     "get_engine_metadata",

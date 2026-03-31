@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import re
 import json
+import re
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -12,7 +12,7 @@ from typing import BinaryIO
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MODEL_NAME = "ViT-B-32"
 DEFAULT_PRETRAINED_TAG = "laion2b_s34b_b79k"
-DEFAULT_CAPTION_MODEL_NAME = "Salesforce/blip-image-captioning-base"
+DEFAULT_CAPTION_MODEL_NAME = "CoreAI/Models/Florence-2-base-ft"
 DEFAULT_TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-ru-en"
 DEFAULT_COMPUTE_DEVICE = "auto"
 DEFAULT_QUERY_REWRITE_ENABLED = False
@@ -20,6 +20,14 @@ DEFAULT_QUERY_REWRITE_MODEL_PATH = "CoreAI/Models/query-rewriter/Qwen2.5-1.5B-In
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 RUSSIAN_TOKEN_PATTERN = re.compile(r"[a-zа-яё0-9-]+", re.IGNORECASE)
 JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
+DEFAULT_ENTITY_PAYLOAD = {
+    "people": [],
+    "objects": [],
+    "scene": [],
+    "actions": [],
+    "attributes": [],
+    "detectedObjectsEn": [],
+}
 QUERY_REWRITE_SYSTEM_PROMPT = """You normalize noisy Russian photo-search queries.
 Rules:
 1. Fix only obvious typos, punctuation, spacing, and inflection mistakes.
@@ -41,6 +49,59 @@ Output: {"normalized_ru":"девка в очках возле тачки на м
 Input: Госпожа
 Output: {"normalized_ru":"Госпожа","normalized_en":"madam","search_prompt_en":"madam"}
 """
+RUSSIAN_CAPTION_SYSTEM_PROMPT = """You expand short English image captions into rich Russian captions for a personal photo viewer.
+Rules:
+1. Return strict JSON only with keys caption_ru and synonyms_ru.
+2. caption_ru must be in Russian and describe only clearly visible content.
+3. caption_ru must be richer than the English source: one full sentence or two short sentences.
+4. Do not invent names, brands, locations, emotions, or events unless explicitly visible in the English caption.
+5. synonyms_ru must be a JSON array of 4 to 8 short Russian words or phrases related to the visible scene.
+6. Synonyms may include near-synonyms, category words, and alternate phrasings useful for display, but not fantasy details.
+7. Avoid duplicates and empty items.
+Example input: a woman with long black hair standing in front of a door
+Example output: {"caption_ru":"На фото женщина с длинными черными волосами стоит перед дверью. Кадр сфокусирован на человеке и входной зоне.","synonyms_ru":["женщина","девушка","длинные черные волосы","дверь","вход","портрет","человек у двери"]}
+"""
+ENTITY_INDEX_SYSTEM_PROMPT = """You convert photo captions into a structured Russian search index for a personal photo album.
+Rules:
+1. Return strict JSON only.
+2. Keys must be: summary_ru, keywords_ru, keywords_en, synonyms_ru, people, objects, scene, actions, attributes.
+3. Use short Russian base forms for all Russian fields.
+4. Use short English base forms for keywords_en.
+5. Mention only visible entities and attributes.
+6. Do not invent names, brands, emotions, or hidden context.
+7. Each array should contain unique, non-empty strings.
+8. keywords_ru should be the main search terms in Russian.
+9. synonyms_ru should contain useful alternate Russian phrasings for search expansion.
+10. people, objects, scene, actions, attributes are separate Russian category arrays.
+"""
+QUERY_ENTITY_SYSTEM_PROMPT = """You normalize a Russian photo-search query into structured search entities.
+Rules:
+1. Return strict JSON only.
+2. Keys must be: normalized_ru, keywords_ru, keywords_en, synonyms_ru, people, objects, scene, actions, attributes.
+3. Keep the meaning exact. Do not add unseen entities.
+4. Use short Russian base forms for Russian fields.
+5. keywords_en should be short English base forms for semantic fallback.
+6. synonyms_ru may contain safe alternate Russian phrasings for the same visible concepts.
+7. Each array must contain unique, non-empty strings.
+"""
+MANUAL_SYNONYM_MAP_RU = {
+    "автомобиль": ["машина", "авто"],
+    "машина": ["автомобиль", "авто"],
+    "девушка": ["женщина"],
+    "женщина": ["девушка"],
+    "мужчина": ["парень", "человек"],
+    "парень": ["мужчина", "человек"],
+    "ребенок": ["малыш", "дитя"],
+    "ребёнок": ["малыш", "дитя"],
+    "пес": ["собака"],
+    "пёс": ["собака"],
+    "собака": ["пес", "пёс"],
+    "пляж": ["берег", "море"],
+    "море": ["пляж", "берег"],
+    "берег": ["пляж", "море"],
+    "очки": ["очко"],
+    "велосипед": ["байк"],
+}
 
 
 @dataclass(frozen=True)
@@ -72,6 +133,7 @@ class CaptionBundle:
     processor: object
     model: object
     device: str
+    torch_dtype: object
 
 
 @dataclass(frozen=True)
@@ -107,6 +169,25 @@ class QueryRewriteResult:
     search_prompt_en: str
     used_rewriter: bool
     fallback_reason: str
+
+
+@dataclass(frozen=True)
+class RussianCaptionResult:
+    caption_ru: str
+    synonyms_ru: list[str]
+
+
+@dataclass(frozen=True)
+class SearchEntityResult:
+    normalized_ru: str
+    keywords_ru: list[str]
+    keywords_en: list[str]
+    synonyms_ru: list[str]
+    people: list[str]
+    objects: list[str]
+    scene: list[str]
+    actions: list[str]
+    attributes: list[str]
 
 
 _model_bundle: ModelBundle | None = None
@@ -296,19 +377,33 @@ def _load_caption_bundle() -> CaptionBundle:
             return _caption_bundle
 
         try:
-            from transformers import BlipForConditionalGeneration, BlipProcessor
+            import torch
+            from transformers import AutoProcessor
+            from transformers.dynamic_module_utils import get_class_from_dynamic_module
         except ImportError as exc:
-            raise RuntimeError("BLIP зависимости не установлены.") from exc
+            raise RuntimeError("Florence зависимости не установлены.") from exc
 
         device = _detect_device()
-        processor = BlipProcessor.from_pretrained(_runtime_config.caption_model_name)
-        model = BlipForConditionalGeneration.from_pretrained(_runtime_config.caption_model_name).to(device)
+        torch_dtype = torch.float16 if device in {"cuda", "mps"} else torch.float32
+        processor = AutoProcessor.from_pretrained(_runtime_config.caption_model_name, trust_remote_code=True)
+        model_class = get_class_from_dynamic_module(
+            "modeling_florence2.Florence2ForConditionalGeneration",
+            _runtime_config.caption_model_name,
+        )
+        model_class._supports_sdpa = False
+        model_class._supports_flash_attn_2 = False
+        model = model_class.from_pretrained(
+            _runtime_config.caption_model_name,
+            trust_remote_code=True,
+            torch_dtype=torch_dtype,
+        ).to(device)
         model.eval()
 
         _caption_bundle = CaptionBundle(
             processor=processor,
             model=model,
             device=device,
+            torch_dtype=torch_dtype,
         )
         return _caption_bundle
 
@@ -340,9 +435,6 @@ def _load_query_rewrite_bundle() -> QueryRewriteBundle:
     with _query_rewrite_lock:
         if _query_rewrite_bundle is not None:
             return _query_rewrite_bundle
-
-        if not _runtime_config.query_rewrite_enabled:
-            raise RuntimeError("Query rewriter отключён в конфиге.")
 
         try:
             from mlx_lm import load
@@ -383,6 +475,45 @@ def extract_search_tokens(text: str) -> list[str]:
         seen_tokens.add(token)
         unique_tokens.append(token)
     return unique_tokens
+
+
+def _normalize_english_list(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = normalize_english_text(value)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        items.append(normalized)
+    return items
+
+
+def _merge_unique_strings(*groups: object, normalizer) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        if not isinstance(group, list):
+            continue
+        for value in group:
+            if not isinstance(value, str):
+                continue
+            normalized = normalizer(value)
+            lowered = normalized.casefold()
+            if not normalized or lowered in seen:
+                continue
+            seen.add(lowered)
+            merged.append(normalized)
+    return merged
+
+
+def _default_entity_payload() -> dict[str, list[str]]:
+    return {key: list(value) for key, value in DEFAULT_ENTITY_PAYLOAD.items()}
 
 
 def get_engine_metadata() -> dict[str, str | int]:
@@ -486,7 +617,22 @@ def create_text_embedding(query: str) -> dict[str, object]:
     }
 
 
-def generate_caption(file_obj: BinaryIO) -> str:
+def _prepare_caption_inputs(inputs: dict[str, object], *, device: str, torch_dtype):
+    prepared_inputs: dict[str, object] = {}
+    for name, value in inputs.items():
+        if not hasattr(value, "to"):
+            prepared_inputs[name] = value
+            continue
+
+        tensor = value
+        if getattr(tensor, "dtype", None) is not None and getattr(tensor, "is_floating_point", lambda: False)():
+            prepared_inputs[name] = tensor.to(device=device, dtype=torch_dtype)
+        else:
+            prepared_inputs[name] = tensor.to(device=device)
+    return prepared_inputs
+
+
+def _run_florence_task(file_obj: BinaryIO, task_prompt: str, *, max_new_tokens: int) -> object:
     from PIL import Image
     import torch
 
@@ -494,20 +640,44 @@ def generate_caption(file_obj: BinaryIO) -> str:
 
     image = Image.open(file_obj)
     image = image.convert("RGB")
-    inputs = bundle.processor(images=image, return_tensors="pt")
-    prepared_inputs = {name: value.to(bundle.device) for name, value in inputs.items()}
+    inputs = bundle.processor(text=task_prompt, images=image, return_tensors="pt")
+    prepared_inputs = _prepare_caption_inputs(inputs, device=bundle.device, torch_dtype=bundle.torch_dtype)
 
     with torch.no_grad():
-        output_tokens = bundle.model.generate(
-            **prepared_inputs,
-            max_new_tokens=32,
+        generated_ids = bundle.model.generate(
+            input_ids=prepared_inputs["input_ids"],
+            pixel_values=prepared_inputs["pixel_values"],
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
             num_beams=4,
         )
 
-    caption = bundle.processor.decode(output_tokens[0], skip_special_tokens=True).strip()
+    generated_text = bundle.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    parsed = bundle.processor.post_process_generation(
+        generated_text,
+        task=task_prompt,
+        image_size=(image.width, image.height),
+    )
+    return parsed.get(task_prompt) if isinstance(parsed, dict) else parsed
+
+
+def generate_caption(file_obj: BinaryIO) -> str:
+    caption = _run_florence_task(file_obj, "<MORE_DETAILED_CAPTION>", max_new_tokens=128)
+    if isinstance(caption, dict):
+        caption = caption.get("<MORE_DETAILED_CAPTION>", "")
+    caption = str(caption).strip()
     if not caption:
-        raise RuntimeError("BLIP не смог сгенерировать описание изображения.")
+        raise RuntimeError("Florence не смогла сгенерировать описание изображения.")
     return normalize_english_text(caption)
+
+
+def detect_objects(file_obj: BinaryIO) -> list[str]:
+    payload = _run_florence_task(file_obj, "<OD>", max_new_tokens=256)
+    if not isinstance(payload, dict):
+        return []
+
+    labels = payload.get("labels", [])
+    return _normalize_english_list(labels)
 
 
 def translate_text_to_english(text: str) -> str:
@@ -533,7 +703,7 @@ def translate_text_to_english(text: str) -> str:
     return normalize_english_text(translated)
 
 
-def _extract_json_object(raw_text: str) -> dict[str, str]:
+def _extract_json_object(raw_text: str) -> dict[str, object]:
     stripped = raw_text.strip()
     if stripped.startswith("```"):
         stripped = stripped.strip("`")
@@ -546,7 +716,29 @@ def _extract_json_object(raw_text: str) -> dict[str, str]:
     payload = json.loads(match.group(0))
     if not isinstance(payload, dict):
         raise ValueError("LLM вернула не JSON-объект.")
-    return {str(key): str(value).strip() for key, value in payload.items()}
+    return {str(key): value for key, value in payload.items()}
+
+
+def _normalize_russian_list(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = normalize_russian_text(value)
+        lowered = normalized.casefold()
+        if not normalized or lowered in seen:
+            continue
+        seen.add(lowered)
+        items.append(normalized)
+    return items
+
+
+def _contains_cyrillic(value: str) -> bool:
+    return any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in value)
 
 
 def _tokenize_russian_text(text: str) -> list[str]:
@@ -569,6 +761,100 @@ def _is_safe_russian_rewrite(original: str, candidate: str) -> bool:
             return False
 
     return True
+
+
+def _expand_manual_synonyms_ru(terms: list[str]) -> list[str]:
+    expanded: list[str] = []
+    seen = {term.casefold() for term in terms}
+    for term in terms:
+        for synonym in MANUAL_SYNONYM_MAP_RU.get(term.casefold(), []):
+            normalized = normalize_russian_text(synonym)
+            lowered = normalized.casefold()
+            if not normalized or lowered in seen:
+                continue
+            seen.add(lowered)
+            expanded.append(normalized)
+    return expanded
+
+
+def _coerce_entity_result(payload: dict[str, object], *, normalized_ru: str) -> dict[str, object]:
+    people = [item for item in _normalize_russian_list(payload.get("people", [])) if _contains_cyrillic(item)]
+    objects = [item for item in _normalize_russian_list(payload.get("objects", [])) if _contains_cyrillic(item)]
+    scene = [item for item in _normalize_russian_list(payload.get("scene", [])) if _contains_cyrillic(item)]
+    actions = [item for item in _normalize_russian_list(payload.get("actions", [])) if _contains_cyrillic(item)]
+    attributes = [item for item in _normalize_russian_list(payload.get("attributes", [])) if _contains_cyrillic(item)]
+    keywords_ru = _merge_unique_strings(
+        payload.get("keywords_ru", []),
+        people,
+        objects,
+        scene,
+        actions,
+        attributes,
+        normalizer=normalize_russian_text,
+    )
+    keywords_ru = [item for item in keywords_ru if _contains_cyrillic(item)]
+    keywords_en = _normalize_english_list(payload.get("keywords_en", []))
+    synonyms_ru = _merge_unique_strings(
+        payload.get("synonyms_ru", []),
+        _expand_manual_synonyms_ru(keywords_ru),
+        normalizer=normalize_russian_text,
+    )
+    return asdict(
+        SearchEntityResult(
+            normalized_ru=normalize_russian_text(str(payload.get("normalized_ru", normalized_ru))),
+            keywords_ru=keywords_ru,
+            keywords_en=keywords_en,
+            synonyms_ru=synonyms_ru,
+            people=people,
+            objects=objects,
+            scene=scene,
+            actions=actions,
+            attributes=attributes,
+        )
+    )
+
+
+def _fallback_query_entities(normalized_ru: str, normalized_en: str) -> dict[str, object]:
+    keywords_ru = _normalize_russian_list(_tokenize_russian_text(normalized_ru))
+    keywords_en = extract_search_tokens(normalized_en)
+    synonyms_ru = _expand_manual_synonyms_ru(keywords_ru)
+    return asdict(
+        SearchEntityResult(
+            normalized_ru=normalized_ru,
+            keywords_ru=keywords_ru,
+            keywords_en=keywords_en,
+            synonyms_ru=synonyms_ru,
+            people=[],
+            objects=[],
+            scene=[],
+            actions=[],
+            attributes=[],
+        )
+    )
+
+
+def _fallback_caption_entities(caption_en: str, detected_objects_en: list[str]) -> dict[str, object]:
+    keywords_en = _merge_unique_strings(
+        extract_search_tokens(caption_en),
+        detected_objects_en,
+        normalizer=normalize_english_text,
+    )
+    translated_ru = [normalize_russian_text(token.replace("-", " ")) for token in detected_objects_en]
+    keywords_ru = _merge_unique_strings(translated_ru, normalizer=normalize_russian_text)
+    synonyms_ru = _expand_manual_synonyms_ru(keywords_ru)
+    return asdict(
+        SearchEntityResult(
+            normalized_ru="",
+            keywords_ru=keywords_ru,
+            keywords_en=keywords_en,
+            synonyms_ru=synonyms_ru,
+            people=[],
+            objects=keywords_ru,
+            scene=[],
+            actions=[],
+            attributes=[],
+        )
+    )
 
 
 def rewrite_search_query(query: str) -> dict[str, str | bool]:
@@ -657,15 +943,171 @@ def rewrite_search_query(query: str) -> dict[str, str | bool]:
         return asdict(result)
 
 
+def analyze_search_query(query: str) -> dict[str, object]:
+    rewrite_result = rewrite_search_query(query)
+    normalized_ru = normalize_russian_text(str(rewrite_result["normalized_ru"]))
+    normalized_en = normalize_english_text(str(rewrite_result["normalized_en"]))
+    fallback = _fallback_query_entities(normalized_ru, normalized_en)
+
+    if not _runtime_config.query_rewrite_enabled:
+        return {
+            **rewrite_result,
+            **fallback,
+            "analysisFallbackReason": "Entity extractor отключён вместе с query rewriter.",
+        }
+
+    try:
+        from mlx_lm import generate
+    except ImportError:
+        return {
+            **rewrite_result,
+            **fallback,
+            "analysisFallbackReason": "MLX entity extractor недоступен.",
+        }
+
+    try:
+        bundle = _load_query_rewrite_bundle()
+        prompt = bundle.tokenizer.apply_chat_template(
+            [
+                {"role": "system", "content": QUERY_ENTITY_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Query RU: {normalized_ru}\nQuery EN: {normalized_en}"},
+            ],
+            add_generation_prompt=True,
+        )
+        raw_output = generate(bundle.model, bundle.tokenizer, prompt=prompt, verbose=False, max_tokens=220)
+        payload = _extract_json_object(raw_output)
+        entity_result = _coerce_entity_result(payload, normalized_ru=normalized_ru)
+        return {**rewrite_result, **entity_result, "analysisFallbackReason": ""}
+    except Exception as exc:
+        return {
+            **rewrite_result,
+            **fallback,
+            "analysisFallbackReason": str(exc),
+        }
+
+
+def generate_russian_caption(caption_en: str) -> dict[str, object]:
+    normalized_caption_en = normalize_english_text(caption_en)
+    if not normalized_caption_en:
+        raise ValueError("Английский caption не должен быть пустым.")
+
+    try:
+        from mlx_lm import generate
+    except ImportError:
+        fallback_caption = f"На изображении: {normalized_caption_en}."
+        return asdict(RussianCaptionResult(caption_ru=fallback_caption, synonyms_ru=[]))
+
+    try:
+        bundle = _load_query_rewrite_bundle()
+        prompt = bundle.tokenizer.apply_chat_template(
+            [
+                {"role": "system", "content": RUSSIAN_CAPTION_SYSTEM_PROMPT},
+                {"role": "user", "content": normalized_caption_en},
+            ],
+            add_generation_prompt=True,
+        )
+        raw_output = generate(bundle.model, bundle.tokenizer, prompt=prompt, verbose=False, max_tokens=220)
+        payload = _extract_json_object(raw_output)
+        caption_ru = normalize_russian_text(str(payload.get("caption_ru", "")))
+        synonyms_ru = _normalize_russian_list(payload.get("synonyms_ru", []))
+        if not caption_ru:
+            raise ValueError("LLM вернула пустой caption_ru.")
+        return asdict(RussianCaptionResult(caption_ru=caption_ru, synonyms_ru=synonyms_ru))
+    except Exception:
+        fallback_caption = f"На изображении: {normalized_caption_en}."
+        return asdict(RussianCaptionResult(caption_ru=fallback_caption, synonyms_ru=[]))
+
+
+def extract_caption_entities(caption_en: str, caption_ru: str, detected_objects_en: list[str]) -> dict[str, object]:
+    normalized_caption_en = normalize_english_text(caption_en)
+    fallback = _fallback_caption_entities(normalized_caption_en, detected_objects_en)
+
+    try:
+        from mlx_lm import generate
+    except ImportError:
+        return {**fallback, "analysisFallbackReason": "MLX entity extractor недоступен."}
+
+    try:
+        bundle = _load_query_rewrite_bundle()
+        object_list = ", ".join(detected_objects_en) if detected_objects_en else "(none)"
+        prompt = bundle.tokenizer.apply_chat_template(
+            [
+                {"role": "system", "content": ENTITY_INDEX_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Caption EN: {normalized_caption_en}\n"
+                        f"Caption RU: {normalize_russian_text(caption_ru)}\n"
+                        f"Detected objects EN: {object_list}"
+                    ),
+                },
+            ],
+            add_generation_prompt=True,
+        )
+        raw_output = generate(bundle.model, bundle.tokenizer, prompt=prompt, verbose=False, max_tokens=260)
+        payload = _extract_json_object(raw_output)
+        entity_result = _coerce_entity_result(payload, normalized_ru="")
+        return {**entity_result, "analysisFallbackReason": ""}
+    except Exception as exc:
+        return {**fallback, "analysisFallbackReason": str(exc)}
+
+
 def create_photo_index(file_obj: BinaryIO) -> dict[str, object]:
     image_embedding = create_image_embedding(file_obj)
     file_obj.seek(0)
     caption_en = generate_caption(file_obj)
-    caption_tokens = extract_search_tokens(caption_en)
+    file_obj.seek(0)
+    detected_objects_en = detect_objects(file_obj)
+    caption_ru_payload = generate_russian_caption(caption_en)
+    entity_index = extract_caption_entities(caption_en, str(caption_ru_payload["caption_ru"]), detected_objects_en)
+    caption_tokens = _merge_unique_strings(
+        extract_search_tokens(caption_en),
+        entity_index.get("keywords_en", []),
+        detected_objects_en,
+        normalizer=normalize_english_text,
+    )
+    entity_payload = _default_entity_payload()
+    entity_payload.update(
+        {
+            "people": list(entity_index.get("people", [])),
+            "objects": list(entity_index.get("objects", [])),
+            "scene": list(entity_index.get("scene", [])),
+            "actions": list(entity_index.get("actions", [])),
+            "attributes": list(entity_index.get("attributes", [])),
+            "detectedObjectsEn": detected_objects_en,
+        }
+    )
+    search_synonyms_ru = _merge_unique_strings(
+        caption_ru_payload.get("synonyms_ru", []),
+        entity_index.get("synonyms_ru", []),
+        normalizer=normalize_russian_text,
+    )
+    search_synonyms_ru = [item for item in search_synonyms_ru if _contains_cyrillic(item)]
+    search_terms_ru = _merge_unique_strings(
+        entity_index.get("keywords_ru", []),
+        search_synonyms_ru,
+        normalizer=normalize_russian_text,
+    )
+    search_terms_ru = [item for item in search_terms_ru if _contains_cyrillic(item)]
+    search_terms_en = _merge_unique_strings(
+        entity_index.get("keywords_en", []),
+        detected_objects_en,
+        normalizer=normalize_english_text,
+    )
 
     return {
         "embedding": image_embedding,
         "caption_model_name": _runtime_config.caption_model_name,
         "caption_en": caption_en,
+        "caption_ru": str(caption_ru_payload["caption_ru"]),
+        "caption_ru_synonyms": list(search_synonyms_ru),
         "caption_tokens": caption_tokens,
+        "search_terms_ru": search_terms_ru,
+        "search_terms_en": search_terms_en,
+        "search_synonyms_ru": list(search_synonyms_ru),
+        "entity_payload": entity_payload,
+        "entity_index_debug": {
+            "analysisFallbackReason": str(entity_index.get("analysisFallbackReason", "")),
+            "detectedObjectsEn": detected_objects_en,
+        },
     }

@@ -3,16 +3,55 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 type TabId = 'library' | 'search' | 'people';
 type AuthMode = 'login' | 'register';
 
+type EntityPayload = {
+  people: string[];
+  objects: string[];
+  scene: string[];
+  actions: string[];
+  attributes: string[];
+  detectedObjectsEn: string[];
+};
+
 type PhotoItem = {
   id: number;
   src: string;
   originalFilename: string;
   processingStatus: string;
+  fileExtension: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  hasEmbedding: boolean;
+  embeddingDimension: number;
+  embeddingModel: string;
+  embeddingPretrainedTag: string;
+  embeddingCreatedAt: string;
+  captionModel: string;
+  captionEn: string;
+  captionRu: string;
+  captionRuSynonyms: string[];
+  searchTermsRu: string[];
+  searchTermsEn: string[];
+  searchSynonymsRu: string[];
+  entityPayload: EntityPayload;
+  captionCreatedAt: string;
+  createdAt: string;
 };
 
 type SearchResultItem = PhotoItem & {
   score: number;
   scorePercent: number;
+  entityScore: number;
+  exactTermScore: number;
+  synonymScore: number;
+  groupCoverageScore: number;
+  englishTermScore: number;
+  embeddingScore: number;
+  embeddingSimilarity: number;
+  queryTermsRu: string[];
+  querySynonymsRu: string[];
+  matchedTermsRu: string[];
+  matchedSynonymsRu: string[];
+  matchedEntityGroups: Partial<Record<keyof Omit<EntityPayload, 'detectedObjectsEn'>, string[]>>;
 };
 
 type PersonItem = {
@@ -41,6 +80,24 @@ type PhotoApiItem = {
   url: string;
   originalFilename: string;
   processingStatus: string;
+  fileExtension: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  hasEmbedding: boolean;
+  embeddingDimension: number;
+  embeddingModel: string;
+  embeddingPretrainedTag: string;
+  embeddingCreatedAt: string;
+  captionModel: string;
+  captionEn: string;
+  captionRu: string;
+  captionRuSynonyms: string[];
+  searchTermsRu: string[];
+  searchTermsEn: string[];
+  searchSynonymsRu: string[];
+  entityPayload: Partial<EntityPayload>;
+  captionCreatedAt: string;
+  createdAt: string;
 };
 
 type PhotoListResponse = {
@@ -89,6 +146,74 @@ type PersonRenameResponse = {
   message?: string;
 };
 
+type PeopleMode = 'cards' | 'map';
+
+type FaceMapFaceItem = {
+  id: number;
+  clusterId: string;
+  personId: number | null;
+  personLabel: string;
+  previewUrl: string;
+  photoId: number;
+  photoUrl: string;
+  photoFilename: string;
+  bbox: number[];
+  qualityScore: number;
+  detectionScore: number;
+  embeddingDimension: number;
+  x: number;
+  y: number;
+};
+
+type FaceClusterItem = {
+  id: string;
+  personId: number | null;
+  label: string;
+  faceCount: number;
+  centroidX: number;
+  centroidY: number;
+};
+
+type FaceMapResponse = {
+  faces: FaceMapFaceItem[];
+  clusters: FaceClusterItem[];
+  clusterEps: number;
+};
+
+type FaceNeighborItem = {
+  id: number;
+  previewUrl: string;
+  photoId: number;
+  photoFilename: string;
+  personId: number | null;
+  personLabel: string;
+  similarity: number;
+  distance: number;
+  sameCluster: boolean;
+};
+
+type FaceAnalysisResponse = {
+  face: {
+    id: number;
+    previewUrl: string;
+    photoId: number;
+    photoUrl: string;
+    photoFilename: string;
+    personId: number | null;
+    personLabel: string;
+    bbox: number[];
+    qualityScore: number;
+    detectionScore: number;
+    clusterFaceCount: number;
+    centroidSimilarity: number;
+  };
+  neighbors: FaceNeighborItem[];
+  clusterEps: number;
+  message?: string;
+};
+
+const FACE_MAP_SCENE_SIZE = 1000;
+
 type AiStatusResponse = {
   enabled: boolean;
   state: string;
@@ -99,18 +224,45 @@ type AiStatusResponse = {
 
 type SearchResponse = {
   query: string;
-  photos: Array<{
-    id: number;
-    url: string;
-    originalFilename: string;
-    processingStatus: string;
-    score: number;
-    scorePercent: number;
-  }>;
+  normalizedRu: string;
+  translatedQuery?: string;
+  searchPromptEn?: string;
+  queryTermsRu?: string[];
+  querySynonymsRu?: string[];
+  queryEntities?: Partial<EntityPayload>;
+  queryAnalysisFallbackReason?: string;
+  photos: Array<
+    PhotoApiItem & {
+      score: number;
+      scorePercent: number;
+      entityScore: number;
+      exactTermScore: number;
+      synonymScore: number;
+      groupCoverageScore: number;
+      englishTermScore: number;
+      embeddingScore: number;
+      embeddingSimilarity: number;
+      queryTermsRu?: string[];
+      querySynonymsRu?: string[];
+      matchedTermsRu?: string[];
+      matchedSynonymsRu?: string[];
+      matchedEntityGroups?: Partial<Record<keyof Omit<EntityPayload, 'detectedObjectsEn'>, string[]>>;
+    }
+  >;
   topK: number;
   totalIndexedPhotos: number;
   skippedPhotos?: number;
   message?: string;
+};
+
+type SearchDebugInfo = {
+  normalizedRu: string;
+  translatedQuery: string;
+  searchPromptEn: string;
+  queryTermsRu: string[];
+  querySynonymsRu: string[];
+  queryEntities: EntityPayload;
+  analysisFallbackReason: string;
 };
 
 const tabs: Array<{ id: TabId; label: string }> = [
@@ -140,6 +292,17 @@ async function readJsonSafely<T>(response: Response): Promise<T | null> {
   }
 }
 
+function emptyEntityPayload(): EntityPayload {
+  return {
+    people: [],
+    objects: [],
+    scene: [],
+    actions: [],
+    attributes: [],
+    detectedObjectsEn: [],
+  };
+}
+
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -156,20 +319,29 @@ function App() {
   const [searchPending, setSearchPending] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchMessage, setSearchMessage] = useState('');
+  const [searchDebug, setSearchDebug] = useState<SearchDebugInfo | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [people, setPeople] = useState<PersonItem[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleMessage, setPeopleMessage] = useState('');
+  const [peopleMode, setPeopleMode] = useState<PeopleMode>('cards');
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [personPhotos, setPersonPhotos] = useState<PhotoItem[]>([]);
   const [personPhotosLoading, setPersonPhotosLoading] = useState(false);
   const [personPhotosMessage, setPersonPhotosMessage] = useState('');
   const [personRenameDraft, setPersonRenameDraft] = useState('');
   const [personRenamePending, setPersonRenamePending] = useState(false);
+  const [faceMapLoading, setFaceMapLoading] = useState(false);
+  const [faceMapMessage, setFaceMapMessage] = useState('');
+  const [faceMapData, setFaceMapData] = useState<FaceMapResponse>({ faces: [], clusters: [], clusterEps: 0 });
+  const [selectedFaceId, setSelectedFaceId] = useState<number | null>(null);
+  const [faceAnalysisLoading, setFaceAnalysisLoading] = useState(false);
+  const [faceAnalysis, setFaceAnalysis] = useState<FaceAnalysisResponse | null>(null);
   const [uploadPending, setUploadPending] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [photoMenu, setPhotoMenu] = useState<{ photoId: number; x: number; y: number } | null>(null);
+  const [viewerPhoto, setViewerPhoto] = useState<PhotoItem | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatusResponse>({
     enabled: false,
     state: 'loading',
@@ -191,13 +363,19 @@ function App() {
       setPhotos([]);
       setSearchResults([]);
       setSearchMessage('');
+      setSearchDebug(null);
       setHasSearched(false);
       setPeople([]);
       setPeopleMessage('');
+      setPeopleMode('cards');
       setSelectedPersonId(null);
       setPersonPhotos([]);
       setPersonPhotosMessage('');
       setPersonRenameDraft('');
+      setFaceMapData({ faces: [], clusters: [], clusterEps: 0 });
+      setFaceMapMessage('');
+      setSelectedFaceId(null);
+      setFaceAnalysis(null);
       return;
     }
 
@@ -222,6 +400,27 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!viewerPhoto) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setViewerPhoto(null);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [viewerPhoto]);
 
   useEffect(() => {
     if (!photoMenu) {
@@ -259,6 +458,23 @@ function App() {
     const selectedPerson = people.find((person) => person.id === selectedPersonId) ?? null;
     setPersonRenameDraft(selectedPerson?.displayName ?? '');
   }, [people, selectedPersonId]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'people' || peopleMode !== 'map' || faceMapLoading || faceMapData.faces.length > 0) {
+      return;
+    }
+
+    void loadFaceMap();
+  }, [activeTab, faceMapData.faces.length, faceMapLoading, peopleMode, user]);
+
+  useEffect(() => {
+    if (!user || selectedFaceId === null || activeTab !== 'people' || peopleMode !== 'map') {
+      setFaceAnalysis(null);
+      return;
+    }
+
+    void loadFaceAnalysis(selectedFaceId);
+  }, [activeTab, peopleMode, selectedFaceId, user]);
 
   async function loadCurrentUser() {
     try {
@@ -308,17 +524,47 @@ function App() {
       src: item.url,
       originalFilename: item.originalFilename,
       processingStatus: item.processingStatus,
+      fileExtension: item.fileExtension,
+      fileSizeBytes: item.fileSizeBytes,
+      mimeType: item.mimeType,
+      hasEmbedding: item.hasEmbedding,
+      embeddingDimension: item.embeddingDimension,
+      embeddingModel: item.embeddingModel,
+      embeddingPretrainedTag: item.embeddingPretrainedTag,
+      embeddingCreatedAt: item.embeddingCreatedAt,
+      captionModel: item.captionModel,
+      captionEn: item.captionEn,
+      captionRu: item.captionRu,
+      captionRuSynonyms: item.captionRuSynonyms ?? [],
+      searchTermsRu: item.searchTermsRu ?? [],
+      searchTermsEn: item.searchTermsEn ?? [],
+      searchSynonymsRu: item.searchSynonymsRu ?? [],
+      entityPayload: {
+        ...emptyEntityPayload(),
+        ...(item.entityPayload ?? {}),
+      },
+      captionCreatedAt: item.captionCreatedAt,
+      createdAt: item.createdAt,
     };
   }
 
   function mapSearchResult(item: SearchResponse['photos'][number]): SearchResultItem {
     return {
-      id: item.id,
-      src: item.url,
-      originalFilename: item.originalFilename,
-      processingStatus: item.processingStatus,
+      ...mapPhoto(item),
       score: item.score,
       scorePercent: item.scorePercent,
+      entityScore: item.entityScore,
+      exactTermScore: item.exactTermScore,
+      synonymScore: item.synonymScore,
+      groupCoverageScore: item.groupCoverageScore,
+      englishTermScore: item.englishTermScore,
+      embeddingScore: item.embeddingScore,
+      embeddingSimilarity: item.embeddingSimilarity,
+      queryTermsRu: item.queryTermsRu ?? [],
+      querySynonymsRu: item.querySynonymsRu ?? [],
+      matchedTermsRu: item.matchedTermsRu ?? [],
+      matchedSynonymsRu: item.matchedSynonymsRu ?? [],
+      matchedEntityGroups: item.matchedEntityGroups ?? {},
     };
   }
 
@@ -401,6 +647,56 @@ function App() {
     }
   }
 
+  async function loadFaceMap() {
+    setFaceMapLoading(true);
+    try {
+      const response = await fetch('/api/people/face-map');
+      const data = await readJsonSafely<FaceMapResponse & { message?: string }>(response);
+      if (!response.ok || !data) {
+        setFaceMapData({ faces: [], clusters: [], clusterEps: 0 });
+        setFaceMapMessage(data?.message ?? 'Не удалось загрузить карту лиц.');
+        setSelectedFaceId(null);
+        return;
+      }
+
+      setFaceMapData({
+        faces: data.faces ?? [],
+        clusters: data.clusters ?? [],
+        clusterEps: data.clusterEps ?? 0,
+      });
+      setFaceMapMessage((data.faces ?? []).length === 0 ? 'Пока нет готовых face embeddings для карты кластеров.' : '');
+      setSelectedFaceId((current) => {
+        if (current !== null && (data.faces ?? []).some((face) => face.id === current)) {
+          return current;
+        }
+        return data.faces?.[0]?.id ?? null;
+      });
+    } catch {
+      setFaceMapData({ faces: [], clusters: [], clusterEps: 0 });
+      setFaceMapMessage('Не удалось связаться с API карты лиц.');
+      setSelectedFaceId(null);
+    } finally {
+      setFaceMapLoading(false);
+    }
+  }
+
+  async function loadFaceAnalysis(faceId: number) {
+    setFaceAnalysisLoading(true);
+    try {
+      const response = await fetch(`/api/people/faces/${faceId}/analysis`);
+      const data = await readJsonSafely<FaceAnalysisResponse>(response);
+      if (!response.ok || !data) {
+        setFaceAnalysis(null);
+        return;
+      }
+      setFaceAnalysis(data);
+    } catch {
+      setFaceAnalysis(null);
+    } finally {
+      setFaceAnalysisLoading(false);
+    }
+  }
+
   function getCookie(name: string) {
     const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
     return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
@@ -457,13 +753,18 @@ function App() {
     setAuthMessage('');
     setUserMenuOpen(false);
     setPhotos([]);
-    setPeople([]);
-    setPeopleMessage('');
-    setSelectedPersonId(null);
-    setPersonPhotos([]);
-    setPersonPhotosMessage('');
+      setPeople([]);
+      setPeopleMessage('');
+      setFaceMapData({ faces: [], clusters: [], clusterEps: 0 });
+      setFaceMapMessage('');
+      setSelectedFaceId(null);
+      setFaceAnalysis(null);
+      setSelectedPersonId(null);
+      setPersonPhotos([]);
+      setPersonPhotosMessage('');
     setPersonRenameDraft('');
     setPhotoMenu(null);
+    setSearchDebug(null);
   }
 
   function showToast(message: string) {
@@ -518,6 +819,7 @@ function App() {
 
       await loadPhotos();
       await loadPeople();
+      await loadFaceMap();
       showToast(data?.message ?? `Загружено ${files.length} фото.`);
       setActiveTab('library');
     } catch {
@@ -546,6 +848,7 @@ function App() {
 
       setPhotos((current) => current.filter((photo) => photo.id !== photoId));
       await loadPeople();
+      await loadFaceMap();
       showToast(data?.message ?? 'Фотография удалена.');
     } catch {
       showToast('Не удалось удалить фотографию. Проверьте соединение с сервером.');
@@ -592,6 +895,7 @@ function App() {
     if (!normalizedQuery) {
       setHasSearched(true);
       setSearchResults([]);
+      setSearchDebug(null);
       setSearchMessage('Введите запрос, чтобы выполнить поиск по фотографии.');
       return;
     }
@@ -613,15 +917,33 @@ function App() {
       const data = await readJsonSafely<SearchResponse & { message?: string }>(response);
       if (!response.ok) {
         setSearchResults([]);
+        setSearchDebug(null);
         setSearchMessage(data?.message ?? 'Не удалось выполнить поиск по фотографиям.');
         return;
       }
 
       const mappedResults = (data?.photos ?? []).map(mapSearchResult);
       setSearchResults(mappedResults);
+      setSearchDebug(
+        data
+          ? {
+              normalizedRu: data.normalizedRu ?? normalizedQuery,
+              translatedQuery: data.translatedQuery ?? '',
+              searchPromptEn: data.searchPromptEn ?? '',
+              queryTermsRu: data.queryTermsRu ?? [],
+              querySynonymsRu: data.querySynonymsRu ?? [],
+              queryEntities: {
+                ...emptyEntityPayload(),
+                ...(data.queryEntities ?? {}),
+              },
+              analysisFallbackReason: data.queryAnalysisFallbackReason ?? '',
+            }
+          : null
+      );
       setSearchMessage(data?.message ?? (mappedResults.length === 0 ? 'Ничего не найдено.' : ''));
     } catch {
       setSearchResults([]);
+      setSearchDebug(null);
       setSearchMessage('Ошибка связи с сервером поиска. Проверьте подключение и повторите запрос.');
     } finally {
       setSearchPending(false);
@@ -733,6 +1055,7 @@ function App() {
           <LibraryView
             photos={photos}
             loading={photosLoading}
+            onPhotoOpen={setViewerPhoto}
             onPhotoContextMenu={(photoId, event) => {
               event.preventDefault();
               setPhotoMenu({
@@ -750,9 +1073,11 @@ function App() {
             setSearchQuery={setSearchQuery}
             pending={searchPending}
             results={searchResults}
+            debugInfo={searchDebug}
             message={searchMessage}
             hasSearched={hasSearched}
             onSubmit={submitSemanticSearch}
+            onPhotoOpen={setViewerPhoto}
           />
         )}
         {activeTab === 'people' && (
@@ -761,6 +1086,8 @@ function App() {
             people={people}
             loading={peopleLoading}
             message={peopleMessage}
+            mode={peopleMode}
+            onModeChange={setPeopleMode}
             selectedPersonId={selectedPersonId}
             onSelectPerson={setSelectedPersonId}
             selectedPersonPhotos={personPhotos}
@@ -770,6 +1097,14 @@ function App() {
             personRenamePending={personRenamePending}
             onRenameDraftChange={setPersonRenameDraft}
             onRenameSave={savePersonName}
+            onPhotoOpen={setViewerPhoto}
+            faceMapData={faceMapData}
+            faceMapLoading={faceMapLoading}
+            faceMapMessage={faceMapMessage}
+            selectedFaceId={selectedFaceId}
+            onSelectFace={setSelectedFaceId}
+            faceAnalysis={faceAnalysis}
+            faceAnalysisLoading={faceAnalysisLoading}
           />
         )}
       </main>
@@ -787,6 +1122,8 @@ function App() {
           {toastMessage}
         </div>
       )}
+
+      {viewerPhoto && <PhotoViewer photo={viewerPhoto} onClose={() => setViewerPhoto(null)} />}
 
       <nav className="tabbar" aria-label="Primary">
         <div className={`tab-highlight ${activeTab}`} />
@@ -902,10 +1239,12 @@ function AuthScreen({
 function LibraryView({
   photos,
   loading,
+  onPhotoOpen,
   onPhotoContextMenu,
 }: {
   photos: PhotoItem[];
   loading: boolean;
+  onPhotoOpen: (photo: PhotoItem) => void;
   onPhotoContextMenu: (photoId: number, event: React.MouseEvent<HTMLElement>) => void;
 }) {
   if (loading) {
@@ -933,9 +1272,53 @@ function LibraryView({
   return (
     <section className="library-grid" aria-label="Photo library">
       {photos.map((photo) => (
-        <article key={photo.id} className="photo-card" onContextMenu={(event) => onPhotoContextMenu(photo.id, event)}>
-          <img src={photo.src} alt={photo.originalFilename} />
-          <div className="photo-overlay" />
+        <article
+          key={photo.id}
+          className="photo-card"
+          onClick={() => onPhotoOpen(photo)}
+          onContextMenu={(event) => onPhotoContextMenu(photo.id, event)}
+        >
+          <div className="photo-card-media">
+            <img src={photo.src} alt={photo.originalFilename} />
+            <div className="photo-overlay" />
+            <div className={`photo-card-status status-${photo.processingStatus}`}>
+              {getProcessingStatusLabel(photo.processingStatus)}
+            </div>
+          </div>
+
+          <div className="photo-card-content">
+            <strong className="photo-card-title" title={photo.originalFilename}>
+              {photo.originalFilename}
+            </strong>
+            <p className="photo-card-caption">
+              {photo.captionRu || photo.captionEn || 'Описание ещё не сгенерировано.'}
+            </p>
+            <EntityChipRow
+              terms={photo.searchTermsRu}
+              label="Теги"
+              emptyLabel="Теги появятся после индексации"
+              limit={4}
+            />
+
+            <dl className="photo-card-metadata">
+              <div>
+                <dt>Добавлено</dt>
+                <dd>{formatDate(photo.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>Размер</dt>
+                <dd>{formatFileSize(photo.fileSizeBytes)}</dd>
+              </div>
+              <div>
+                <dt>Формат</dt>
+                <dd>{photo.fileExtension || 'Не указан'}</dd>
+              </div>
+              <div>
+                <dt>AI</dt>
+                <dd>{photo.hasEmbedding || photo.captionRu || photo.captionEn ? 'Есть данные' : 'В обработке'}</dd>
+              </div>
+            </dl>
+          </div>
         </article>
       ))}
     </section>
@@ -948,18 +1331,22 @@ function SearchView({
   setSearchQuery,
   pending,
   results,
+  debugInfo,
   message,
   hasSearched,
   onSubmit,
+  onPhotoOpen,
 }: {
   aiStatus: AiStatusResponse;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
   pending: boolean;
   results: SearchResultItem[];
+  debugInfo: SearchDebugInfo | null;
   message: string;
   hasSearched: boolean;
   onSubmit: () => void;
+  onPhotoOpen: (photo: SearchResultItem) => void;
 }) {
   const isAiUnavailable = !aiStatus.enabled;
   const isSearchReady = aiStatus.enabled && aiStatus.state !== 'error' && aiStatus.state !== 'disabled';
@@ -976,7 +1363,7 @@ function SearchView({
     <section className="search-stage">
       <div className="search-intro">
         <h2>Поиск по фото</h2>
-        <p>Опишите человека, объект, сцену или место на фотографии.</p>
+        <p>Основной поиск теперь идёт по сущностям, тегам и нормализованным признакам, а embedding служит только дополнительным сигналом.</p>
       </div>
 
       <form className="search-composer" onSubmit={submitForm}>
@@ -1030,6 +1417,31 @@ function SearchView({
         <section className="search-results-panel">
           {message && <div className="search-feedback-card">{message}</div>}
 
+          {debugInfo && (
+            <div className="search-debug-card">
+              <div className="search-debug-row">
+                <strong>Нормализованный запрос</strong>
+                <span>{debugInfo.normalizedRu || 'Нет данных'}</span>
+              </div>
+              {debugInfo.translatedQuery && (
+                <div className="search-debug-row">
+                  <strong>Перевод для fallback</strong>
+                  <span>{debugInfo.translatedQuery}</span>
+                </div>
+              )}
+              <EntityChipRow terms={debugInfo.queryTermsRu} label="Ключевые термы" emptyLabel="Термы не выделены" />
+              <EntityGroupGrid entityPayload={debugInfo.queryEntities} title="Выделенные сущности запроса" />
+              {debugInfo.querySynonymsRu.length > 0 && (
+                <EntityChipRow terms={debugInfo.querySynonymsRu} label="Синонимы" emptyLabel="" limit={8} />
+              )}
+              {debugInfo.analysisFallbackReason && (
+                <div className="search-debug-note">
+                  Анализатор сущностей использовал fallback: {debugInfo.analysisFallbackReason}
+                </div>
+              )}
+            </div>
+          )}
+
           {!hasSearched && !message && (
             <div className="search-feedback-card search-feedback-muted">
               Введите описание сцены и запустите поиск. Сервер вернёт top-10 самых близких фотографий из вашей медиатеки.
@@ -1039,12 +1451,19 @@ function SearchView({
           {hasSearched && !pending && results.length > 0 && (
             <div className="search-results-grid">
               {results.map((photo) => (
-                <article key={photo.id} className="search-result-card">
+                <article key={photo.id} className="search-result-card" onClick={() => onPhotoOpen(photo)}>
                   <img src={photo.src} alt={photo.originalFilename} />
                   <div className="photo-overlay" />
                   <div className="search-result-meta">
                     <strong>{photo.originalFilename}</strong>
                     <span>Релевантность {photo.scorePercent.toFixed(1)}%</span>
+                    <span>Сущности {(photo.entityScore * 100).toFixed(1)}% • embedding {(photo.embeddingScore * 100).toFixed(1)}%</span>
+                    {photo.matchedTermsRu.length > 0 && (
+                      <EntityChipRow terms={photo.matchedTermsRu} label="Совпавшие термы" emptyLabel="" compact limit={4} />
+                    )}
+                    {photo.matchedSynonymsRu.length > 0 && (
+                      <EntityChipRow terms={photo.matchedSynonymsRu} label="Совпавшие синонимы" emptyLabel="" compact limit={4} />
+                    )}
                   </div>
                 </article>
               ))}
@@ -1061,6 +1480,8 @@ function PeopleView({
   people,
   loading,
   message,
+  mode,
+  onModeChange,
   selectedPersonId,
   onSelectPerson,
   selectedPersonPhotos,
@@ -1070,11 +1491,21 @@ function PeopleView({
   personRenamePending,
   onRenameDraftChange,
   onRenameSave,
+  onPhotoOpen,
+  faceMapData,
+  faceMapLoading,
+  faceMapMessage,
+  selectedFaceId,
+  onSelectFace,
+  faceAnalysis,
+  faceAnalysisLoading,
 }: {
   aiStatus: AiStatusResponse;
   people: PersonItem[];
   loading: boolean;
   message: string;
+  mode: PeopleMode;
+  onModeChange: (mode: PeopleMode) => void;
   selectedPersonId: number | null;
   onSelectPerson: (personId: number) => void;
   selectedPersonPhotos: PhotoItem[];
@@ -1084,6 +1515,14 @@ function PeopleView({
   personRenamePending: boolean;
   onRenameDraftChange: (value: string) => void;
   onRenameSave: () => void;
+  onPhotoOpen: (photo: PhotoItem) => void;
+  faceMapData: FaceMapResponse;
+  faceMapLoading: boolean;
+  faceMapMessage: string;
+  selectedFaceId: number | null;
+  onSelectFace: (faceId: number) => void;
+  faceAnalysis: FaceAnalysisResponse | null;
+  faceAnalysisLoading: boolean;
 }) {
   const selectedPerson = people.find((person) => person.id === selectedPersonId) ?? null;
   const isAiUnavailable = !aiStatus.enabled;
@@ -1121,101 +1560,782 @@ function PeopleView({
     <section className="people-stage">
       {message && <div className="search-feedback-card">{message}</div>}
 
-      <div className="people-layout">
-        <section className="people-sidebar">
-          <div className="people-grid" role="list" aria-label="Группы людей">
-            {people.map((person) => {
-              const title = person.displayName || person.fallbackName;
+      <div className="people-mode-switch" role="tablist" aria-label="Режим вкладки Люди">
+        <button
+          type="button"
+          className={`people-mode-button ${mode === 'cards' ? 'active' : ''}`}
+          aria-selected={mode === 'cards'}
+          onClick={() => onModeChange('cards')}
+        >
+          Карточки людей
+        </button>
+        <button
+          type="button"
+          className={`people-mode-button ${mode === 'map' ? 'active' : ''}`}
+          aria-selected={mode === 'map'}
+          onClick={() => onModeChange('map')}
+        >
+          Карта кластеров
+        </button>
+      </div>
+
+      {mode === 'cards' ? (
+        <div className="people-layout">
+          <section className="people-sidebar">
+            <div className="people-grid" role="list" aria-label="Группы людей">
+              {people.map((person) => {
+                const title = person.displayName || person.fallbackName;
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    className={`person-tile ${selectedPersonId === person.id ? 'active' : ''}`}
+                    onClick={() => onSelectPerson(person.id)}
+                  >
+                    <div className="person-portrait-shell">
+                      {person.previewUrl ? (
+                        <img className="person-portrait" src={person.previewUrl} alt={title} />
+                      ) : (
+                        <div className="person-portrait person-portrait-placeholder">{title.slice(0, 1)}</div>
+                      )}
+                    </div>
+                    <h3>{title}</h3>
+                    <span className="person-count">{person.photoCount} фото</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="people-detail-card">
+            {selectedPerson && (
+              <>
+                <div className="people-detail-header">
+                  <div>
+                    <span className="feature-status-eyebrow">Карточка человека</span>
+                    <h2>{selectedPerson.displayName || selectedPerson.fallbackName}</h2>
+                    <p>
+                      Система объединила {selectedPerson.faceCount} найденных лиц в {selectedPerson.photoCount} фотографиях.
+                    </p>
+                  </div>
+                  {selectedPerson.previewUrl ? (
+                    <img className="people-detail-preview" src={selectedPerson.previewUrl} alt={selectedPerson.displayName || selectedPerson.fallbackName} />
+                  ) : (
+                    <div className="people-detail-preview people-detail-preview-placeholder">
+                      {(selectedPerson.displayName || selectedPerson.fallbackName).slice(0, 1)}
+                    </div>
+                  )}
+                </div>
+
+                <form
+                  className="person-rename-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void onRenameSave();
+                  }}
+                >
+                  <label className="person-rename-field">
+                    <span>Имя человека</span>
+                    <input
+                      value={personRenameDraft}
+                      onChange={(event) => onRenameDraftChange(event.target.value)}
+                      placeholder={selectedPerson.fallbackName}
+                      maxLength={120}
+                    />
+                  </label>
+                  <button className="auth-submit-button person-rename-submit" type="submit" disabled={personRenamePending}>
+                    {personRenamePending ? 'Сохраняем...' : 'Сохранить имя'}
+                  </button>
+                </form>
+
+                {selectedPersonPhotosLoading && (
+                  <div className="search-feedback-card search-feedback-muted">Загружаем фотографии этого человека...</div>
+                )}
+
+                {!selectedPersonPhotosLoading && selectedPersonPhotosMessage && (
+                  <div className="search-feedback-card">{selectedPersonPhotosMessage}</div>
+                )}
+
+                {!selectedPersonPhotosLoading && selectedPersonPhotos.length > 0 && (
+                  <div className="people-photo-grid">
+                    {selectedPersonPhotos.map((photo) => (
+                      <article key={photo.id} className="people-photo-card" onClick={() => onPhotoOpen(photo)}>
+                        <img src={photo.src} alt={photo.originalFilename} />
+                        <div className="photo-overlay" />
+                        <div className="search-result-meta">
+                          <strong>{photo.originalFilename}</strong>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      ) : (
+        <PeopleClusterMapView
+          data={faceMapData}
+          loading={faceMapLoading}
+          message={faceMapMessage}
+          selectedFaceId={selectedFaceId}
+          onSelectFace={onSelectFace}
+          analysis={faceAnalysis}
+          analysisLoading={faceAnalysisLoading}
+        />
+      )}
+    </section>
+  );
+}
+
+function PeopleClusterMapView({
+  data,
+  loading,
+  message,
+  selectedFaceId,
+  onSelectFace,
+  analysis,
+  analysisLoading,
+}: {
+  data: FaceMapResponse;
+  loading: boolean;
+  message: string;
+  selectedFaceId: number | null;
+  onSelectFace: (faceId: number) => void;
+  analysis: FaceAnalysisResponse | null;
+  analysisLoading: boolean;
+}) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const gestureBaseScaleRef = useRef(1);
+  const interactionReleaseTimeoutRef = useRef<number | null>(null);
+  const dragRef = useRef<{
+    active: boolean;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  }>({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+  });
+  const [view, setView] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [isViewportActive, setIsViewportActive] = useState(false);
+
+  function clampScale(value: number) {
+    return Math.min(4, Math.max(0.65, value));
+  }
+
+  function buildCenteredView(scale: number) {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return { scale, offsetX: 0, offsetY: 0 };
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    return {
+      scale,
+      offsetX: (rect.width - FACE_MAP_SCENE_SIZE * scale) / 2,
+      offsetY: (rect.height - FACE_MAP_SCENE_SIZE * scale) / 2,
+    };
+  }
+
+  function zoomAt(clientX: number, clientY: number, nextScale: number) {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    setView((current) => {
+      const clampedScale = clampScale(nextScale);
+      const localX = clientX - rect.left;
+      const localY = clientY - rect.top;
+      const worldX = (localX - current.offsetX) / current.scale;
+      const worldY = (localY - current.offsetY) / current.scale;
+      return {
+        scale: clampedScale,
+        offsetX: localX - worldX * clampedScale,
+        offsetY: localY - worldY * clampedScale,
+      };
+    });
+  }
+
+  function resetView() {
+    setView(buildCenteredView(1));
+  }
+
+  function applyWheelInteraction(deltaX: number, deltaY: number, clientX: number, clientY: number, zoomIntent: boolean) {
+    setIsViewportActive(true);
+    if (interactionReleaseTimeoutRef.current !== null) {
+      window.clearTimeout(interactionReleaseTimeoutRef.current);
+    }
+    interactionReleaseTimeoutRef.current = window.setTimeout(() => {
+      if (!dragRef.current.active) {
+        setIsViewportActive(false);
+      }
+    }, 220);
+
+    if (zoomIntent) {
+      const zoomFactor = Math.exp(-deltaY * 0.0025);
+      zoomAt(clientX, clientY, view.scale * zoomFactor);
+      return;
+    }
+
+    setView((current) => ({
+      ...current,
+      offsetX: current.offsetX - deltaX,
+      offsetY: current.offsetY - deltaY,
+    }));
+  }
+
+  function handleCanvasWheel(event: React.WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    applyWheelInteraction(event.deltaX, event.deltaY, event.clientX, event.clientY, event.ctrlKey || event.metaKey);
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+    if (event.target instanceof HTMLElement && event.target.closest('.people-cluster-node')) {
+      return;
+    }
+
+    dragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: view.offsetX,
+      originY: view.offsetY,
+    };
+    setIsPanning(true);
+    setIsViewportActive(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current.active || dragRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragRef.current.startX;
+    const deltaY = event.clientY - dragRef.current.startY;
+    setView((current) => ({
+      ...current,
+      offsetX: dragRef.current.originX + deltaX,
+      offsetY: dragRef.current.originY + deltaY,
+    }));
+  }
+
+  function finishPointerInteraction(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current.pointerId === event.pointerId) {
+      dragRef.current.active = false;
+      dragRef.current.pointerId = null;
+      setIsPanning(false);
+      setIsViewportActive(false);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    }
+  }
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const handleGestureStart = (event: Event) => {
+      const gestureEvent = event as Event & { preventDefault: () => void };
+      gestureEvent.preventDefault();
+      event.stopPropagation();
+      gestureBaseScaleRef.current = view.scale;
+    };
+
+    const handleGestureChange = (
+      event: Event & { clientX?: number; clientY?: number; scale?: number; preventDefault: () => void }
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = viewport.getBoundingClientRect();
+      const clientX = event.clientX ?? rect.left + rect.width / 2;
+      const clientY = event.clientY ?? rect.top + rect.height / 2;
+      const gestureScale = typeof event.scale === 'number' ? event.scale : 1;
+      zoomAt(clientX, clientY, gestureBaseScaleRef.current * gestureScale);
+    };
+
+    const handleNativeWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyWheelInteraction(event.deltaX, event.deltaY, event.clientX, event.clientY, event.ctrlKey || event.metaKey);
+    };
+
+    viewport.addEventListener('wheel', handleNativeWheel, { passive: false });
+    viewport.addEventListener('gesturestart', handleGestureStart as EventListener, { passive: false });
+    viewport.addEventListener('gesturechange', handleGestureChange as EventListener, { passive: false });
+
+    return () => {
+      viewport.removeEventListener('wheel', handleNativeWheel);
+      viewport.removeEventListener('gesturestart', handleGestureStart as EventListener);
+      viewport.removeEventListener('gesturechange', handleGestureChange as EventListener);
+    };
+  }, [view.scale]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+
+    if (isViewportActive || isPanning) {
+      root.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      root.style.overflow = previousRootOverflow;
+      body.style.overflow = previousBodyOverflow;
+    };
+  }, [isPanning, isViewportActive]);
+
+  useEffect(() => {
+    return () => {
+      if (interactionReleaseTimeoutRef.current !== null) {
+        window.clearTimeout(interactionReleaseTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (data.faces.length === 0) {
+      return;
+    }
+    setView(buildCenteredView(1));
+  }, [data.faces.length]);
+
+  if (loading) {
+    return (
+      <section className="people-cluster-layout">
+        <div className="people-cluster-canvas-shell search-feedback-card">Строим карту лиц и кластеров...</div>
+        <aside className="people-cluster-detail-card search-feedback-card">Готовим explain-панель выбранного лица.</aside>
+      </section>
+    );
+  }
+
+  if (message) {
+    return <div className="search-feedback-card">{message}</div>;
+  }
+
+  const clusterMembers = new Map<string, FaceMapFaceItem[]>();
+  for (const face of data.faces) {
+    const clusterFaceList = clusterMembers.get(face.clusterId) ?? [];
+    clusterFaceList.push(face);
+    clusterMembers.set(face.clusterId, clusterFaceList);
+  }
+
+  const clusterLayouts = data.clusters.map((cluster, index) => {
+    const members = clusterMembers.get(cluster.id) ?? [];
+    const centerX = cluster.centroidX * FACE_MAP_SCENE_SIZE * view.scale + view.offsetX;
+    const centerY = cluster.centroidY * FACE_MAP_SCENE_SIZE * view.scale + view.offsetY;
+    const radiusWorld = members.reduce((maxDistance, face) => {
+      const dx = (face.x - cluster.centroidX) * FACE_MAP_SCENE_SIZE;
+      const dy = (face.y - cluster.centroidY) * FACE_MAP_SCENE_SIZE;
+      return Math.max(maxDistance, Math.hypot(dx, dy));
+    }, 0);
+    const radiusPx = Math.max(radiusWorld * view.scale + 44, 40);
+
+    return {
+      ...cluster,
+      color: clusterColor(index),
+      centerX,
+      centerY,
+      radiusPx,
+    };
+  });
+
+  return (
+    <section className="people-cluster-layout">
+      <div className="people-cluster-canvas-shell">
+        <div className="people-cluster-canvas-header">
+          <div>
+            <span className="feature-status-eyebrow">Карта лиц</span>
+            <h2>Кластеры лиц</h2>
+            <p>Здесь показано, как система сгруппировала найденные лица. Лица одного человека обычно находятся рядом и попадают в один кластер.</p>
+          </div>
+          <div className="people-cluster-stats people-cluster-stats-extended">
+            <strong>{data.faces.length}</strong>
+            <span>лиц</span>
+            <strong>{data.clusters.length}</strong>
+            <span>кластеров</span>
+            <strong>{Math.round(view.scale * 100)}%</strong>
+            <span>масштаб</span>
+            <button type="button" className="people-cluster-reset" onClick={resetView}>
+              Сбросить вид
+            </button>
+          </div>
+        </div>
+
+        <div
+          ref={viewportRef}
+          className={`people-cluster-canvas ${isPanning ? 'is-panning' : ''}`}
+          tabIndex={0}
+          onWheel={handleCanvasWheel}
+          onFocus={() => setIsViewportActive(true)}
+          onBlur={() => setIsViewportActive(false)}
+          onPointerEnter={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            setIsViewportActive(true);
+          }}
+          onPointerLeave={(event) => {
+            finishPointerInteraction(event);
+            setIsViewportActive(false);
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={finishPointerInteraction}
+          onPointerCancel={finishPointerInteraction}
+        >
+          <div className="people-cluster-scene">
+            {clusterLayouts.map((cluster) => (
+              <div
+                key={cluster.id}
+                className="people-cluster-ring"
+                style={{
+                  left: `${cluster.centerX}px`,
+                  top: `${cluster.centerY}px`,
+                  width: `${cluster.radiusPx * 2}px`,
+                  height: `${cluster.radiusPx * 2}px`,
+                  ['--cluster-color' as string]: cluster.color,
+                }}
+              >
+                <span>{cluster.faceCount}</span>
+              </div>
+            ))}
+
+            {data.faces.map((face) => {
+              const cluster = clusterLayouts.find((item) => item.id === face.clusterId);
               return (
                 <button
-                  key={person.id}
+                  key={face.id}
                   type="button"
-                  className={`person-tile ${selectedPersonId === person.id ? 'active' : ''}`}
-                  onClick={() => onSelectPerson(person.id)}
+                  className={`people-cluster-node ${selectedFaceId === face.id ? 'active' : ''}`}
+                  style={{
+                    left: `${face.x * FACE_MAP_SCENE_SIZE * view.scale + view.offsetX}px`,
+                    top: `${face.y * FACE_MAP_SCENE_SIZE * view.scale + view.offsetY}px`,
+                    ['--cluster-color' as string]: cluster?.color ?? clusterColor(-1),
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectFace(face.id);
+                  }}
+                  title={`${face.personLabel || 'Без имени'} • ${face.photoFilename}`}
                 >
-                  <div className="person-portrait-shell">
-                    {person.previewUrl ? (
-                      <img className="person-portrait" src={person.previewUrl} alt={title} />
-                    ) : (
-                      <div className="person-portrait person-portrait-placeholder">{title.slice(0, 1)}</div>
-                    )}
-                  </div>
-                  <h3>{title}</h3>
-                  <span className="person-count">{person.photoCount} фото</span>
+                  {face.previewUrl ? <img src={face.previewUrl} alt={face.photoFilename} /> : <span>{face.id}</span>}
                 </button>
               );
             })}
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="people-detail-card">
-          {selectedPerson && (
-            <>
-              <div className="people-detail-header">
-                <div>
-                  <span className="feature-status-eyebrow">Карточка человека</span>
-                  <h2>{selectedPerson.displayName || selectedPerson.fallbackName}</h2>
-                  <p>
-                    Система объединила {selectedPerson.faceCount} найденных лиц в {selectedPerson.photoCount} фотографиях.
-                  </p>
-                </div>
-                {selectedPerson.previewUrl ? (
-                  <img className="people-detail-preview" src={selectedPerson.previewUrl} alt={selectedPerson.displayName || selectedPerson.fallbackName} />
+      <aside className="people-cluster-detail-card">
+        {analysisLoading && <div className="search-feedback-card search-feedback-muted">Считаем соседей и похожесть выбранного лица...</div>}
+
+        {!analysisLoading && !analysis && (
+          <div className="search-feedback-card search-feedback-muted">
+            Выберите лицо на карте, чтобы увидеть исходное фото, bbox, силу сходства с центром кластера и ближайших соседей.
+          </div>
+        )}
+
+        {!analysisLoading && analysis && (
+          <>
+            <div className="people-cluster-selected">
+              <div className="people-cluster-selected-preview">
+                {analysis.face.previewUrl ? (
+                  <img src={analysis.face.previewUrl} alt={analysis.face.photoFilename} />
                 ) : (
-                  <div className="people-detail-preview people-detail-preview-placeholder">
-                    {(selectedPerson.displayName || selectedPerson.fallbackName).slice(0, 1)}
-                  </div>
+                  <div className="people-cluster-selected-placeholder">Face</div>
                 )}
               </div>
+              <div>
+                <span className="feature-status-eyebrow">Выбранное лицо</span>
+                <h3>{analysis.face.personLabel || 'Без имени'}</h3>
+                <p>{analysis.face.photoFilename}</p>
+              </div>
+            </div>
 
-              <form
-                className="person-rename-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void onRenameSave();
-                }}
-              >
-                <label className="person-rename-field">
-                  <span>Имя человека</span>
-                  <input
-                    value={personRenameDraft}
-                    onChange={(event) => onRenameDraftChange(event.target.value)}
-                    placeholder={selectedPerson.fallbackName}
-                    maxLength={120}
-                  />
-                </label>
-                <button className="auth-submit-button person-rename-submit" type="submit" disabled={personRenamePending}>
-                  {personRenamePending ? 'Сохраняем...' : 'Сохранить имя'}
-                </button>
-              </form>
+            <div className="people-cluster-analysis-grid">
+              <div className="people-cluster-analysis-card">
+                <span>Лиц в кластере</span>
+                <strong>{analysis.face.clusterFaceCount}</strong>
+              </div>
+              <div className="people-cluster-analysis-card">
+                <span>Похожесть к центру</span>
+                <strong>{(analysis.face.centroidSimilarity * 100).toFixed(1)}%</strong>
+              </div>
+              <div className="people-cluster-analysis-card">
+                <span>Quality score</span>
+                <strong>{analysis.face.qualityScore.toFixed(3)}</strong>
+              </div>
+              <div className="people-cluster-analysis-card">
+                <span>Detection score</span>
+                <strong>{analysis.face.detectionScore.toFixed(3)}</strong>
+              </div>
+            </div>
 
-              {selectedPersonPhotosLoading && (
-                <div className="search-feedback-card search-feedback-muted">Загружаем фотографии этого человека...</div>
-              )}
+            <div className="people-cluster-source-card">
+              <h4>Исходное фото и bbox</h4>
+              <img className="people-cluster-source-photo" src={analysis.face.photoUrl} alt={analysis.face.photoFilename} />
+              <p>
+                bbox: {analysis.face.bbox.map((value) => Math.round(value)).join(', ')}
+              </p>
+              <p>Порог кластеризации: {analysis.clusterEps.toFixed(2)}</p>
+            </div>
 
-              {!selectedPersonPhotosLoading && selectedPersonPhotosMessage && (
-                <div className="search-feedback-card">{selectedPersonPhotosMessage}</div>
-              )}
-
-              {!selectedPersonPhotosLoading && selectedPersonPhotos.length > 0 && (
-                <div className="people-photo-grid">
-                  {selectedPersonPhotos.map((photo) => (
-                    <article key={photo.id} className="people-photo-card">
-                      <img src={photo.src} alt={photo.originalFilename} />
-                      <div className="photo-overlay" />
-                      <div className="search-result-meta">
-                        <strong>{photo.originalFilename}</strong>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-      </div>
+            <div className="people-cluster-neighbors-card">
+              <h4>Ближайшие лица</h4>
+              <div className="people-cluster-neighbor-list">
+                {analysis.neighbors.map((neighbor) => (
+                  <button
+                    key={neighbor.id}
+                    type="button"
+                    className={`people-cluster-neighbor ${neighbor.sameCluster ? 'same-cluster' : ''}`}
+                    onClick={() => onSelectFace(neighbor.id)}
+                  >
+                    <div className="people-cluster-neighbor-preview">
+                      {neighbor.previewUrl ? <img src={neighbor.previewUrl} alt={neighbor.photoFilename} /> : <span>{neighbor.id}</span>}
+                    </div>
+                    <div className="people-cluster-neighbor-copy">
+                      <strong>{neighbor.personLabel || 'Без имени'}</strong>
+                      <span>{neighbor.photoFilename}</span>
+                      <span>
+                        similarity {(neighbor.similarity * 100).toFixed(1)}% • distance {neighbor.distance.toFixed(3)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
     </section>
   );
+}
+
+function EntityChipRow({
+  terms,
+  label,
+  emptyLabel,
+  compact = false,
+  limit = 6,
+}: {
+  terms: string[];
+  label: string;
+  emptyLabel: string;
+  compact?: boolean;
+  limit?: number;
+}) {
+  const visibleTerms = terms.slice(0, limit);
+
+  if (visibleTerms.length === 0) {
+    return emptyLabel ? <div className="entity-chip-empty">{emptyLabel}</div> : null;
+  }
+
+  return (
+    <div className="entity-chip-block">
+      <span className="entity-chip-label">{label}</span>
+      <div className={`entity-chip-row ${compact ? 'compact' : ''}`}>
+        {visibleTerms.map((term) => (
+          <span key={term} className={`entity-chip ${compact ? 'compact' : ''}`}>
+            {term}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EntityGroupGrid({ entityPayload, title }: { entityPayload: EntityPayload; title: string }) {
+  const groups: Array<{ key: keyof Omit<EntityPayload, 'detectedObjectsEn'>; label: string }> = [
+    { key: 'people', label: 'Люди' },
+    { key: 'objects', label: 'Объекты' },
+    { key: 'scene', label: 'Сцена' },
+    { key: 'actions', label: 'Действия' },
+    { key: 'attributes', label: 'Признаки' },
+  ];
+
+  const hasAnyGroup = groups.some(({ key }) => entityPayload[key].length > 0);
+  if (!hasAnyGroup) {
+    return null;
+  }
+
+  return (
+    <div className="entity-group-grid-shell">
+      <h3>{title}</h3>
+      <div className="entity-group-grid">
+        {groups.map(({ key, label }) =>
+          entityPayload[key].length > 0 ? (
+            <div key={key} className="entity-group-card">
+              <strong>{label}</strong>
+              <div className="entity-chip-row compact">
+                {entityPayload[key].map((term) => (
+                  <span key={`${key}-${term}`} className="entity-chip compact">
+                    {term}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PhotoViewer({ photo, onClose }: { photo: PhotoItem; onClose: () => void }) {
+  const displayCaption = photo.captionRu || photo.captionEn || 'Для этой фотографии caption пока не был сгенерирован.';
+  const hasEnglishCaption = Boolean(photo.captionEn && photo.captionEn !== photo.captionRu);
+  const metadataRows = [
+    { label: 'Имя файла', value: photo.originalFilename },
+    { label: 'Статус обработки', value: photo.processingStatus },
+    { label: 'Дата добавления', value: formatDate(photo.createdAt) },
+    { label: 'Размер файла', value: formatFileSize(photo.fileSizeBytes) },
+    { label: 'MIME type', value: photo.mimeType || 'Не определён' },
+    { label: 'Расширение', value: photo.fileExtension || 'Не указано' },
+    { label: 'Embedding', value: photo.hasEmbedding ? 'Построен' : 'Нет' },
+    { label: 'Размерность embedding', value: photo.embeddingDimension > 0 ? String(photo.embeddingDimension) : 'Нет данных' },
+    { label: 'Embedding model', value: photo.embeddingModel || 'Не указана' },
+    { label: 'Embedding tag', value: photo.embeddingPretrainedTag || 'Не указан' },
+    { label: 'Embedding created', value: formatDate(photo.embeddingCreatedAt) },
+    { label: 'Caption model', value: photo.captionModel || 'Не указана' },
+    { label: 'Caption created', value: formatDate(photo.captionCreatedAt) },
+  ];
+
+  return (
+    <div className="photo-viewer-backdrop" role="presentation" onClick={onClose}>
+      <section
+        className="photo-viewer-shell"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Просмотр фото ${photo.originalFilename}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="photo-viewer-media-pane">
+          <img className="photo-viewer-image" src={photo.src} alt={photo.originalFilename} />
+        </div>
+
+        <aside className="photo-viewer-meta-pane">
+          <div className="photo-viewer-header">
+            <div>
+              <span className="feature-status-eyebrow">Расширенный просмотр</span>
+              <h2>{photo.originalFilename}</h2>
+            </div>
+            <button className="photo-viewer-close" type="button" aria-label="Закрыть просмотр" onClick={onClose}>
+              ×
+            </button>
+          </div>
+
+          <div className="photo-viewer-meta-scroll">
+            <div className="photo-viewer-section">
+              <h3>Русский caption</h3>
+              <p>{displayCaption}</p>
+            </div>
+
+            <div className="photo-viewer-section">
+              <h3>Поисковый индекс</h3>
+              <EntityChipRow terms={photo.searchTermsRu} label="Основные теги" emptyLabel="Теги ещё не сформированы" />
+              {photo.searchSynonymsRu.length > 0 && (
+                <EntityChipRow terms={photo.searchSynonymsRu} label="Синонимы" emptyLabel="" limit={10} />
+              )}
+            </div>
+
+            <EntityGroupGrid entityPayload={photo.entityPayload} title="Сущности и признаки" />
+
+            {hasEnglishCaption && (
+              <div className="photo-viewer-section">
+                <h3>English caption</h3>
+                <p>{photo.captionEn}</p>
+              </div>
+            )}
+
+            <div className="photo-viewer-section">
+              <h3>Метаданные</h3>
+              <dl className="photo-viewer-metadata-list">
+                {metadataRows.map((item) => (
+                  <div key={item.label} className="photo-viewer-metadata-row">
+                    <dt>{item.label}</dt>
+                    <dd>{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </div>
+  );
+}
+
+function clusterColor(index: number): string {
+  const palette = ['#88d2ff', '#ffbe78', '#8ea0ff', '#8be7c4', '#ff9a9a', '#f6e58d', '#d2a8ff', '#79e1ff'];
+  return palette[((index % palette.length) + palette.length) % palette.length];
+}
+
+function formatFileSize(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 'Неизвестно';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatDate(value: string): string {
+  if (!value) {
+    return 'Нет данных';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+function getProcessingStatusLabel(status: string): string {
+  switch (status) {
+    case 'indexed':
+      return 'Готово';
+    case 'processing':
+      return 'Обработка';
+    case 'uploaded':
+      return 'Загружено';
+    case 'failed':
+      return 'Ошибка';
+    default:
+      return status || 'Неизвестно';
+  }
 }
 
 function SearchIcon() {

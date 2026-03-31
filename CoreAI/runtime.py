@@ -188,6 +188,30 @@ def rewrite_search_query(query: str) -> dict[str, str | bool]:
     return result
 
 
+def analyze_search_query(query: str) -> dict[str, object]:
+    config = _parse_config_file()
+    enabled = _is_enabled(config.get("bEnableAiModule"))
+    if not enabled:
+        raise RuntimeError("AI-модуль отключён в CoreAI.config.")
+
+    shipping = _get_configured_embeddings(config)
+    result = shipping.analyze_search_query(query)
+
+    with _status_lock:
+        global _has_attempted_load, _status
+        _has_attempted_load = True
+        shipping_status = shipping.get_runtime_status()
+        _status = AiModuleStatus(
+            enabled=True,
+            state=str(shipping_status["state"]),
+            summary=str(shipping_status["summary"]),
+            details=str(shipping_status["details"]),
+            reason=str(shipping_status["reason"]),
+        )
+
+    return result
+
+
 def create_photo_index(file_obj) -> dict[str, object]:
     config = _parse_config_file()
     enabled = _is_enabled(config.get("bEnableAiModule"))
