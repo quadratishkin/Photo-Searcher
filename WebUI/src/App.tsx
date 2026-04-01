@@ -1804,31 +1804,6 @@ function SearchView({
         <section className="search-results-panel">
           {message && <div className="search-feedback-card">{message}</div>}
 
-          {debugInfo && (
-            <div className="search-debug-card">
-              <div className="search-debug-row">
-                <strong>Нормализованный запрос</strong>
-                <span>{debugInfo.normalizedRu || 'Нет данных'}</span>
-              </div>
-              {debugInfo.translatedQuery && (
-                <div className="search-debug-row">
-                  <strong>Перевод для fallback</strong>
-                  <span>{debugInfo.translatedQuery}</span>
-                </div>
-              )}
-              <EntityChipRow terms={debugInfo.queryTermsRu} label="Ключевые термы" emptyLabel="Термы не выделены" />
-              <EntityGroupGrid entityPayload={debugInfo.queryEntities} title="Выделенные сущности запроса" />
-              {debugInfo.querySynonymsRu.length > 0 && (
-                <EntityChipRow terms={debugInfo.querySynonymsRu} label="Синонимы" emptyLabel="" limit={8} />
-              )}
-              {debugInfo.analysisFallbackReason && (
-                <div className="search-debug-note">
-                  Анализатор сущностей использовал fallback: {debugInfo.analysisFallbackReason}
-                </div>
-              )}
-            </div>
-          )}
-
           {!hasSearched && !message && (
             <div className="search-feedback-card search-feedback-muted">
               Введите описание сцены и запустите поиск. Сервер вернёт top-10 самых близких фотографий из вашей медиатеки.
