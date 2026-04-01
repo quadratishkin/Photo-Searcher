@@ -649,10 +649,6 @@ def login_telegram_user(
     if existing_profile is not None and existing_profile.user_id != user.id:
         existing_profile.delete()
 
-    conflicting_profile = TelegramProfile.objects.filter(user=user).exclude(telegram_user_id=telegram_user_id).first()
-    if conflicting_profile is not None:
-        raise ValueError("Этот аккаунт уже привязан к другому Telegram-пользователю.")
-
     TelegramProfile.objects.update_or_create(
         telegram_user_id=telegram_user_id,
         defaults={

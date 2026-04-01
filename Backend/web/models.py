@@ -92,7 +92,7 @@ class DetectedFace(models.Model):
 
 
 class TelegramProfile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="telegram_profile")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="telegram_profiles")
     telegram_user_id = models.BigIntegerField(unique=True)
     telegram_chat_id = models.BigIntegerField(unique=True)
     telegram_username = models.CharField(max_length=255, blank=True)
