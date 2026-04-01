@@ -1173,10 +1173,6 @@ function App() {
           <div className="topbar-spacer" />
         )}
         <div className="action-row">
-          <div className="status-badge ai-badge">
-            <span className="status-badge-label">{aiStatus.summary}</span>
-            <strong>{aiStatus.details}</strong>
-          </div>
           <div className="user-menu">
             <button
               className={`user-badge user-badge-button ${userMenuOpen ? 'active' : ''}`}
