@@ -1,3 +1,4 @@
+import os
 import sys
 
 from django.apps import AppConfig
@@ -14,3 +15,12 @@ class WebConfig(AppConfig):
         from CoreAI.runtime import load_ai_module
 
         load_ai_module()
+
+        if sys.argv[1] != "runserver":
+            return
+        if os.environ.get("LIQUID_PHOTOS_RUN_TELEGRAM_INSIDE_SERVER", "").strip().lower() not in {"1", "true", "yes", "on"}:
+            return
+
+        from web.telegram_bot import start_polling_background
+
+        start_polling_background()

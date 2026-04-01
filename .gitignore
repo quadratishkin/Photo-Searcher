@@ -13,3 +13,5 @@ Local_DB/
 dev/
 Backend/staticfiles/
 CoreAI/Models/query-rewriter/
+.env
+.env.local

@@ -181,6 +181,47 @@ python Backend/run_app.py
 .venv/bin/python Backend/manage.py runserver 127.0.0.1:8000 --noreload
 ```
 
+### Telegram bot
+
+Установка зависимостей:
+
+```bash
+pip install -r Backend/requirements.txt
+```
+
+Локальная конфигурация бота:
+
+```bash
+cp .env.example .env.local
+# затем заполните LIQUID_PHOTOS_TELEGRAM_BOT_ID и LIQUID_PHOTOS_TELEGRAM_BOT_TOKEN
+```
+
+Запуск бота:
+
+```bash
+.venv/bin/python Backend/manage.py migrate
+.venv/bin/python Backend/manage.py run_telegram_bot
+```
+
+`manage.py`, `run_telegram_bot` и `Launch_MacOS.sh` автоматически читают `.env.local` из корня проекта, поэтому ручной `export` не нужен.
+
+Полный запуск веб-приложения вместе с Telegram-ботом:
+
+```bash
+/bin/zsh /absolute/path/to/Photo-Searcher/Launch_MacOS.sh
+```
+
+Если в `.env.local` задан `LIQUID_PHOTOS_TELEGRAM_BOT_TOKEN`, скрипт поднимет один общий Django-процесс, внутри которого будет запущен и web, и Telegram polling. Отдельный второй full-процесс для бота при таком запуске не создаётся.
+
+Что умеет бот:
+
+- просмотр библиотеки с пагинацией
+- загрузка фото прямо из Telegram
+- текстовый поиск по медиатеке
+- список людей и просмотр фото конкретного человека
+
+Бот автоматически создаёт локальный Django-профиль для каждого Telegram-пользователя.
+
 ## Конфигурация
 
 ### Локальные данные

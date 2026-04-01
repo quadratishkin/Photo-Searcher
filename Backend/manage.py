@@ -2,8 +2,11 @@
 import os
 import sys
 
+from liquid_photos.env import load_project_env
+
 
 def main() -> None:
+    load_project_env()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "liquid_photos.settings")
     from django.core.management import execute_from_command_line
 
