@@ -12,6 +12,16 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = BACKEND_DIR.parent
 
 
+def resolve_project_path(raw_value: str | os.PathLike[str] | None, default: Path) -> Path:
+    if raw_value is None or str(raw_value).strip() == "":
+        return default.resolve()
+
+    candidate = Path(raw_value)
+    if not candidate.is_absolute():
+        candidate = BASE_DIR / candidate
+    return candidate.resolve()
+
+
 def env_bool(name: str, default: bool) -> bool:
     raw_value = os.environ.get(name)
     if raw_value is None:
@@ -28,7 +38,7 @@ def env_list(name: str, default: list[str]) -> list[str]:
     return [item for item in values if item]
 
 
-LOCAL_DB_DIR = Path(os.environ.get("LIQUID_PHOTOS_DATA_DIR", BASE_DIR / "Local_DB")).resolve()
+LOCAL_DB_DIR = resolve_project_path(os.environ.get("LIQUID_PHOTOS_DATA_DIR"), BASE_DIR / "Local_DB")
 LOCAL_DB_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA_ROOT = LOCAL_DB_DIR / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
