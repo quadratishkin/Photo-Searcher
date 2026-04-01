@@ -66,6 +66,8 @@ type PersonItem = {
 type AuthUser = {
   id: number;
   username: string;
+  isStaff: boolean;
+  isSuperuser: boolean;
 };
 
 type AuthResponse = {
@@ -222,6 +224,71 @@ type AiStatusResponse = {
   reason: string;
 };
 
+type AdminSummary = {
+  totalUsers: number;
+  activeUsers: number;
+  bannedUsers: number;
+  staffUsers: number;
+  totalPhotos: number;
+  indexedPhotos: number;
+  processingPhotos: number;
+  failedPhotos: number;
+  totalPeople: number;
+  totalFaces: number;
+};
+
+type AdminHostInfo = {
+  hostname: string;
+  platform: string;
+  python: string;
+  timezone: string;
+  serverTime: string;
+};
+
+type AdminModelCard = {
+  title: string;
+  value: string;
+  details: string;
+};
+
+type AdminRuntime = {
+  enabled: boolean;
+  state: string;
+  summary: string;
+  details: string;
+  reason: string;
+  models: AdminModelCard[];
+};
+
+type AdminUserItem = {
+  id: number;
+  username: string;
+  isActive: boolean;
+  isStaff: boolean;
+  isSuperuser: boolean;
+  dateJoined: string;
+  lastLogin: string;
+  photoCount: number;
+  personCount: number;
+  faceCount: number;
+};
+
+type AdminOverviewResponse = {
+  viewer: AuthUser;
+  summary: AdminSummary;
+  host: AdminHostInfo;
+  runtime: AdminRuntime;
+  users: AdminUserItem[];
+};
+
+type AdminUserAccessResponse = {
+  message?: string;
+  user?: {
+    id: number;
+    isActive: boolean;
+  };
+};
+
 type SearchResponse = {
   query: string;
   normalizedRu: string;
@@ -340,6 +407,11 @@ function App() {
   const [uploadPending, setUploadPending] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminMessage, setAdminMessage] = useState('');
+  const [adminOverview, setAdminOverview] = useState<AdminOverviewResponse | null>(null);
+  const [adminActionUserId, setAdminActionUserId] = useState<number | null>(null);
   const [photoMenu, setPhotoMenu] = useState<{ photoId: number; x: number; y: number } | null>(null);
   const [viewerPhoto, setViewerPhoto] = useState<PhotoItem | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatusResponse>({
@@ -352,6 +424,7 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const photoMenuRef = useRef<HTMLDivElement | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const canAccessAdmin = Boolean(user?.isStaff || user?.isSuperuser);
 
   useEffect(() => {
     void loadCurrentUser();
@@ -376,6 +449,10 @@ function App() {
       setFaceMapMessage('');
       setSelectedFaceId(null);
       setFaceAnalysis(null);
+      setAdminPanelOpen(false);
+      setAdminOverview(null);
+      setAdminMessage('');
+      setAdminActionUserId(null);
       return;
     }
 
@@ -443,6 +520,21 @@ function App() {
       window.removeEventListener('scroll', closePhotoMenu, true);
     };
   }, [photoMenu]);
+
+  useEffect(() => {
+    if (!adminPanelOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setAdminPanelOpen(false);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [adminPanelOpen]);
 
   useEffect(() => {
     if (!user || selectedPersonId === null) {
@@ -515,6 +607,31 @@ function App() {
         details: 'Нет ответа от AI status API',
         reason: 'Не удалось выполнить запрос состояния AI-модуля.',
       });
+    }
+  }
+
+  async function loadAdminOverview() {
+    if (!canAccessAdmin) {
+      return;
+    }
+
+    setAdminLoading(true);
+    setAdminMessage('');
+    try {
+      const response = await fetch('/api/admin/overview');
+      const data = await readJsonSafely<AdminOverviewResponse & { message?: string }>(response);
+      if (!response.ok || !data) {
+        setAdminOverview(null);
+        setAdminMessage(data?.message ?? 'Не удалось загрузить данные админки.');
+        return;
+      }
+
+      setAdminOverview(data);
+    } catch {
+      setAdminOverview(null);
+      setAdminMessage('Не удалось связаться с административным API.');
+    } finally {
+      setAdminLoading(false);
     }
   }
 
@@ -753,18 +870,22 @@ function App() {
     setAuthMessage('');
     setUserMenuOpen(false);
     setPhotos([]);
-      setPeople([]);
-      setPeopleMessage('');
-      setFaceMapData({ faces: [], clusters: [], clusterEps: 0 });
-      setFaceMapMessage('');
-      setSelectedFaceId(null);
-      setFaceAnalysis(null);
-      setSelectedPersonId(null);
-      setPersonPhotos([]);
-      setPersonPhotosMessage('');
+    setPeople([]);
+    setPeopleMessage('');
+    setFaceMapData({ faces: [], clusters: [], clusterEps: 0 });
+    setFaceMapMessage('');
+    setSelectedFaceId(null);
+    setFaceAnalysis(null);
+    setSelectedPersonId(null);
+    setPersonPhotos([]);
+    setPersonPhotosMessage('');
     setPersonRenameDraft('');
     setPhotoMenu(null);
     setSearchDebug(null);
+    setAdminPanelOpen(false);
+    setAdminOverview(null);
+    setAdminMessage('');
+    setAdminActionUserId(null);
   }
 
   function showToast(message: string) {
@@ -852,6 +973,53 @@ function App() {
       showToast(data?.message ?? 'Фотография удалена.');
     } catch {
       showToast('Не удалось удалить фотографию. Проверьте соединение с сервером.');
+    }
+  }
+
+  async function handleAdminUserAccess(targetUser: AdminUserItem) {
+    setAdminActionUserId(targetUser.id);
+    try {
+      const response = await fetch(`/api/admin/users/${targetUser.id}/access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ active: !targetUser.isActive }),
+      });
+
+      const data = await readJsonSafely<AdminUserAccessResponse>(response);
+      if (!response.ok) {
+        showToast(data?.message ?? 'Не удалось обновить статус пользователя.');
+        return;
+      }
+
+      setAdminOverview((current) => {
+        if (!current || !data?.user) {
+          return current;
+        }
+
+        const users = current.users.map((userItem) =>
+          userItem.id === data.user?.id ? { ...userItem, isActive: data.user.isActive } : userItem
+        );
+        const activeUsers = users.filter((userItem) => userItem.isActive).length;
+        const bannedUsers = users.length - activeUsers;
+        return {
+          ...current,
+          users,
+          summary: {
+            ...current.summary,
+            activeUsers,
+            bannedUsers,
+          },
+        };
+      });
+
+      showToast(data?.message ?? 'Статус пользователя обновлён.');
+    } catch {
+      showToast('Не удалось обновить статус пользователя. Проверьте соединение с сервером.');
+    } finally {
+      setAdminActionUserId(null);
     }
   }
 
@@ -1027,6 +1195,22 @@ function App() {
               </button>
             )}
           </div>
+          {canAccessAdmin && (
+            <button
+              className={`glass-icon-button admin-toggle-button ${adminPanelOpen ? 'active' : ''}`}
+              aria-label="Открыть админку"
+              onClick={() => {
+                const nextOpen = !adminPanelOpen;
+                setAdminPanelOpen(nextOpen);
+                setUserMenuOpen(false);
+                if (nextOpen) {
+                  void loadAdminOverview();
+                }
+              }}
+            >
+              <AdminIcon />
+            </button>
+          )}
           <button className="glass-icon-button" aria-label="Открыть поиск" onClick={() => setActiveTab('search')}>
             <SearchIcon />
           </button>
@@ -1125,6 +1309,19 @@ function App() {
 
       {viewerPhoto && <PhotoViewer photo={viewerPhoto} onClose={() => setViewerPhoto(null)} />}
 
+      {canAccessAdmin && adminPanelOpen && (
+        <AdminPanel
+          overview={adminOverview}
+          loading={adminLoading}
+          message={adminMessage}
+          pendingUserId={adminActionUserId}
+          currentUserId={user.id}
+          onClose={() => setAdminPanelOpen(false)}
+          onRefresh={loadAdminOverview}
+          onUserAccessToggle={handleAdminUserAccess}
+        />
+      )}
+
       <nav className="tabbar" aria-label="Primary">
         <div className={`tab-highlight ${activeTab}`} />
         {tabs.map((tab) => (
@@ -1133,6 +1330,200 @@ function App() {
           </button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+function AdminPanel({
+  overview,
+  loading,
+  message,
+  pendingUserId,
+  currentUserId,
+  onClose,
+  onRefresh,
+  onUserAccessToggle,
+}: {
+  overview: AdminOverviewResponse | null;
+  loading: boolean;
+  message: string;
+  pendingUserId: number | null;
+  currentUserId: number;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  onUserAccessToggle: (user: AdminUserItem) => Promise<void>;
+}) {
+  const summaryCards = overview
+    ? [
+        { label: 'Пользователи', value: overview.summary.totalUsers, accent: 'blue' },
+        { label: 'Активные', value: overview.summary.activeUsers, accent: 'mint' },
+        { label: 'Заблокированные', value: overview.summary.bannedUsers, accent: 'red' },
+        { label: 'Фотографии', value: overview.summary.totalPhotos, accent: 'amber' },
+        { label: 'Проиндексировано', value: overview.summary.indexedPhotos, accent: 'blue' },
+        { label: 'Лица', value: overview.summary.totalFaces, accent: 'mint' },
+      ]
+    : [];
+
+  return (
+    <div className="admin-overlay" role="presentation" onClick={onClose}>
+      <section
+        className="admin-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Административная панель"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="admin-drawer-header">
+          <div>
+            <span className="feature-status-eyebrow">Админка</span>
+            <h2>Панель управления приложением</h2>
+            <p>Быстрый обзор пользователей, состояния AI runtime и активности медиатеки.</p>
+          </div>
+          <div className="admin-drawer-actions">
+            <button type="button" className="admin-ghost-button" onClick={() => void onRefresh()} disabled={loading}>
+              Обновить
+            </button>
+            <button className="photo-viewer-close admin-close-button" type="button" aria-label="Закрыть админку" onClick={onClose}>
+              ×
+            </button>
+          </div>
+        </header>
+
+        <div className="admin-drawer-scroll">
+          {loading && <div className="search-feedback-card search-feedback-muted">Собираем статистику и состояние runtime...</div>}
+          {!loading && message && <div className="search-feedback-card">{message}</div>}
+
+          {!loading && overview && (
+            <>
+              <section className="admin-summary-grid">
+                {summaryCards.map((card) => (
+                  <article key={card.label} className={`admin-summary-card accent-${card.accent}`}>
+                    <span>{card.label}</span>
+                    <strong>{card.value}</strong>
+                  </article>
+                ))}
+              </section>
+
+              <section className="admin-info-grid">
+                <article className="admin-info-card">
+                  <div className="admin-section-heading">
+                    <span className="feature-status-eyebrow">Хост</span>
+                    <h3>Где сейчас запущено приложение</h3>
+                  </div>
+                  <dl className="admin-definition-list">
+                    <div>
+                      <dt>Компьютер</dt>
+                      <dd>{overview.host.hostname}</dd>
+                    </div>
+                    <div>
+                      <dt>Платформа</dt>
+                      <dd>{overview.host.platform}</dd>
+                    </div>
+                    <div>
+                      <dt>Python</dt>
+                      <dd>{overview.host.python}</dd>
+                    </div>
+                    <div>
+                      <dt>Часовой пояс</dt>
+                      <dd>{overview.host.timezone}</dd>
+                    </div>
+                    <div>
+                      <dt>Время сервера</dt>
+                      <dd>{formatDate(overview.host.serverTime)}</dd>
+                    </div>
+                  </dl>
+                </article>
+
+                <article className="admin-info-card">
+                  <div className="admin-section-heading">
+                    <span className="feature-status-eyebrow">AI Runtime</span>
+                    <h3>Статус и модели</h3>
+                  </div>
+                  <div className="admin-runtime-banner">
+                    <strong>{overview.runtime.summary}</strong>
+                    <span>{overview.runtime.details}</span>
+                    {overview.runtime.reason && <p>{overview.runtime.reason}</p>}
+                  </div>
+                  <div className="admin-model-grid">
+                    {overview.runtime.models.map((model) => (
+                      <article key={`${model.title}-${model.value}`} className="admin-model-card">
+                        <span>{model.title}</span>
+                        <strong>{model.value}</strong>
+                        <p>{model.details}</p>
+                      </article>
+                    ))}
+                  </div>
+                </article>
+              </section>
+
+              <section className="admin-users-section">
+                <div className="admin-section-heading">
+                  <span className="feature-status-eyebrow">Пользователи</span>
+                  <h3>Кто есть в системе и сколько данных у каждого</h3>
+                </div>
+                <div className="admin-user-list">
+                  {overview.users.map((account) => {
+                    const isSelf = account.id === currentUserId;
+                    return (
+                      <article key={account.id} className={`admin-user-card ${account.isActive ? '' : 'is-blocked'}`}>
+                        <div className="admin-user-main">
+                          <div className="admin-user-title-row">
+                            <div>
+                              <h4>{account.username}</h4>
+                              <p>
+                                Добавлен {formatDate(account.dateJoined)}
+                                {account.lastLogin ? ` • последний вход ${formatDate(account.lastLogin)}` : ' • ещё не входил'}
+                              </p>
+                            </div>
+                            <div className="admin-user-badges">
+                              <span className={`admin-role-badge ${account.isActive ? 'active' : 'blocked'}`}>
+                                {account.isActive ? 'Активен' : 'Заблокирован'}
+                              </span>
+                              {account.isStaff && <span className="admin-role-badge">Staff</span>}
+                              {account.isSuperuser && <span className="admin-role-badge">Superuser</span>}
+                              {isSelf && <span className="admin-role-badge">Вы</span>}
+                            </div>
+                          </div>
+
+                          <div className="admin-user-stats">
+                            <div>
+                              <span>Фотографии</span>
+                              <strong>{account.photoCount}</strong>
+                            </div>
+                            <div>
+                              <span>Люди</span>
+                              <strong>{account.personCount}</strong>
+                            </div>
+                            <div>
+                              <span>Лица</span>
+                              <strong>{account.faceCount}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className={`admin-access-button ${account.isActive ? 'danger' : 'safe'}`}
+                          disabled={pendingUserId === account.id || isSelf}
+                          onClick={() => void onUserAccessToggle(account)}
+                        >
+                          {pendingUserId === account.id
+                            ? 'Обновляем...'
+                            : isSelf
+                              ? 'Текущий аккаунт'
+                              : account.isActive
+                                ? 'Забанить'
+                                : 'Разбанить'}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -2353,6 +2744,17 @@ function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M11.25 5h1.5v6.25H19v1.5h-6.25V19h-1.5v-6.25H5v-1.5h6.25V5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AdminIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 3.5 5 6.35v4.12c0 4.08 2.45 7.82 6.23 9.5L12 20.5l.77-.53C16.55 18.29 19 14.55 19 10.47V6.35L12 3.5Zm0 1.62 5.5 2.23v3.12c0 3.43-2.03 6.59-5.16 8.06L12 18.76l-.34-.23C8.53 17.06 6.5 13.9 6.5 10.47V7.35L12 5.12Zm0 2.13a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Zm-4 8.75c.54-1.71 2.12-2.75 4-2.75s3.46 1.04 4 2.75h-8Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }

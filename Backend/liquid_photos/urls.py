@@ -7,6 +7,8 @@ from django.urls import path, re_path
 from django.views.static import serve
 
 from web.views import (
+    admin_overview,
+    admin_user_access,
     ai_status,
     auth_login,
     auth_logout,
@@ -14,6 +16,8 @@ from web.views import (
     auth_register,
     index,
     people_list,
+    people_face_analysis,
+    people_face_map,
     person_photos,
     person_rename,
     photo_delete,
@@ -27,6 +31,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", index, name="index"),
     path("api/ai/status", ai_status, name="ai-status"),
+    path("api/admin/overview", admin_overview, name="admin-overview"),
+    path("api/admin/users/<int:user_id>/access", admin_user_access, name="admin-user-access"),
     path("api/auth/me", auth_me, name="auth-me"),
     path("api/auth/login", auth_login, name="auth-login"),
     path("api/auth/register", auth_register, name="auth-register"),
@@ -36,6 +42,8 @@ urlpatterns = [
     path("api/photos/upload", photo_upload, name="photo-upload"),
     path("api/photos/<int:photo_id>/delete", photo_delete, name="photo-delete"),
     path("api/people", people_list, name="people-list"),
+    path("api/people/face-map", people_face_map, name="people-face-map"),
+    path("api/people/faces/<int:face_id>/analysis", people_face_analysis, name="people-face-analysis"),
     path("api/people/<int:person_id>/photos", person_photos, name="person-photos"),
     path("api/people/<int:person_id>/rename", person_rename, name="person-rename"),
 ]

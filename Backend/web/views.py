@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 import logging
 import math
+import platform
 import re
+import socket
+import sys
 from pathlib import Path
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
+from django.db.models import Count, Q
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -22,8 +26,25 @@ from CoreAI.runtime import (
     rewrite_search_query,
     translate_text_to_english,
 )
-from web.models import Person, Photo
-from web.people import clear_photo_faces, cluster_user_faces, index_photo_faces, list_people_for_user, list_person_photos
+from web.models import DetectedFace, Person, Photo
+from web.people import (
+    clear_photo_faces,
+    cluster_user_faces,
+    describe_face_for_user,
+    index_photo_faces,
+    list_face_map_for_user,
+    list_people_for_user,
+    list_person_photos,
+)
+from web.services import (
+    delete_photo_for_user,
+    get_person_photos_payload_for_user,
+    list_people_payload_for_user,
+    list_photos_for_user,
+    rename_person_for_user,
+    search_photos_for_user,
+    upload_photo_files_for_user,
+)
 
 
 User = get_user_model()
@@ -63,9 +84,102 @@ def parse_json_body(request: HttpRequest) -> dict:
 
 
 def require_authenticated_user(request: HttpRequest) -> JsonResponse | None:
-    if request.user.is_authenticated:
+    if request.user.is_authenticated and request.user.is_active:
         return None
+    if request.user.is_authenticated and not request.user.is_active:
+        logout(request)
+        return JsonResponse({"message": "Аккаунт заблокирован администратором."}, status=403)
     return JsonResponse({"message": "Требуется авторизация."}, status=401)
+
+
+def require_admin_user(request: HttpRequest) -> JsonResponse | None:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+    if request.user.is_staff or request.user.is_superuser:
+        return None
+    return JsonResponse({"message": "Доступно только администраторам."}, status=403)
+
+
+def serialize_auth_user(user) -> dict:
+    return {
+        "id": user.id,
+        "username": user.get_username(),
+        "isStaff": bool(user.is_staff),
+        "isSuperuser": bool(user.is_superuser),
+    }
+
+
+def build_loaded_model_cards(ai_status_payload: dict[str, str | bool]) -> list[dict[str, str]]:
+    model_cards: list[dict[str, str]] = []
+
+    try:
+        embedding_metadata = get_embedding_engine_metadata()
+    except Exception as exc:
+        embedding_metadata = None
+        model_cards.append(
+            {
+                "title": "Embedding runtime",
+                "value": "Не удалось прочитать",
+                "details": str(exc),
+            }
+        )
+    else:
+        model_cards.append(
+            {
+                "title": "Embedding runtime",
+                "value": str(embedding_metadata.get("model_name", "Не указан")),
+                "details": (
+                    f"{embedding_metadata.get('pretrained_tag', 'no-tag')} • "
+                    f"{embedding_metadata.get('device', 'unknown')} • "
+                    f"{embedding_metadata.get('embedding_dimension', 0)} dim"
+                ),
+            }
+        )
+
+    recent_photo = (
+        Photo.objects.filter(Q(caption_model__gt="") | Q(embedding_model__gt=""))
+        .only("caption_model", "embedding_model", "embedding_pretrained_tag")
+        .order_by("-updated_at")
+        .first()
+    )
+    if recent_photo is not None:
+        model_cards.append(
+            {
+                "title": "Photo indexing",
+                "value": recent_photo.caption_model or recent_photo.embedding_model or "Нет данных",
+                "details": (
+                    recent_photo.embedding_model
+                    if recent_photo.caption_model and recent_photo.embedding_model != recent_photo.caption_model
+                    else recent_photo.embedding_pretrained_tag or "Модель взята из последних проиндексированных фото"
+                ),
+            }
+        )
+
+    recent_face = (
+        DetectedFace.objects.exclude(embedding_model="")
+        .only("embedding_model", "embedding_dimension")
+        .order_by("-updated_at")
+        .first()
+    )
+    if recent_face is not None:
+        model_cards.append(
+            {
+                "title": "Face clustering",
+                "value": recent_face.embedding_model or "Нет данных",
+                "details": f"{recent_face.embedding_dimension} dim",
+            }
+        )
+
+    model_cards.append(
+        {
+            "title": "AI runtime state",
+            "value": str(ai_status_payload.get("summary", "Нет данных")),
+            "details": str(ai_status_payload.get("details", "")),
+        }
+    )
+
+    return model_cards
 
 
 def serialize_photo(photo: Photo) -> dict:
@@ -80,7 +194,13 @@ def serialize_photo(photo: Photo) -> dict:
         "hasEmbedding": bool(photo.embedding_dimension and photo.embedding_vector),
         "embeddingDimension": photo.embedding_dimension,
         "embeddingModel": photo.embedding_model,
+        "embeddingPretrainedTag": photo.embedding_pretrained_tag,
+        "embeddingCreatedAt": photo.embedding_created_at.isoformat() if photo.embedding_created_at else "",
+        "captionModel": photo.caption_model,
         "captionEn": photo.caption_en,
+        "captionRu": photo.caption_ru,
+        "captionRuSynonyms": list(photo.caption_ru_synonyms),
+        "captionCreatedAt": photo.caption_created_at.isoformat() if photo.caption_created_at else "",
         "createdAt": photo.created_at.isoformat(),
     }
 
@@ -192,14 +312,14 @@ def ai_status(request: HttpRequest) -> JsonResponse:
 def auth_me(request: HttpRequest) -> JsonResponse:
     if not request.user.is_authenticated:
         return JsonResponse({"authenticated": False}, status=401)
+    if not request.user.is_active:
+        logout(request)
+        return JsonResponse({"authenticated": False, "message": "Аккаунт заблокирован."}, status=403)
 
     return JsonResponse(
         {
             "authenticated": True,
-            "user": {
-                "id": request.user.id,
-                "username": request.user.get_username(),
-            },
+            "user": serialize_auth_user(request.user),
         }
     )
 
@@ -226,10 +346,7 @@ def auth_login(request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "authenticated": True,
-            "user": {
-                "id": user.id,
-                "username": user.get_username(),
-            },
+            "user": serialize_auth_user(user),
         }
     )
 
@@ -241,13 +358,129 @@ def auth_logout(request: HttpRequest) -> JsonResponse:
 
 
 @require_GET
+def admin_overview(request: HttpRequest) -> JsonResponse:
+    admin_error = require_admin_user(request)
+    if admin_error is not None:
+        return admin_error
+
+    ai_status_payload = get_ai_module_status()
+
+    users = (
+        User.objects.order_by("username")
+        .annotate(
+            photo_count=Count("photos", distinct=True),
+            person_count=Count("people", distinct=True),
+            face_count=Count("photos__detected_faces", distinct=True),
+        )
+    )
+
+    user_payload = [
+        {
+            "id": account.id,
+            "username": account.get_username(),
+            "isActive": bool(account.is_active),
+            "isStaff": bool(account.is_staff),
+            "isSuperuser": bool(account.is_superuser),
+            "dateJoined": account.date_joined.isoformat() if getattr(account, "date_joined", None) else "",
+            "lastLogin": account.last_login.isoformat() if account.last_login else "",
+            "photoCount": account.photo_count,
+            "personCount": account.person_count,
+            "faceCount": account.face_count,
+        }
+        for account in users
+    ]
+
+    summary = {
+        "totalUsers": User.objects.count(),
+        "activeUsers": User.objects.filter(is_active=True).count(),
+        "bannedUsers": User.objects.filter(is_active=False).count(),
+        "staffUsers": User.objects.filter(is_staff=True).count(),
+        "totalPhotos": Photo.objects.count(),
+        "indexedPhotos": Photo.objects.filter(processing_status="indexed").count(),
+        "processingPhotos": Photo.objects.filter(processing_status="processing").count(),
+        "failedPhotos": Photo.objects.filter(processing_status="failed").count(),
+        "totalPeople": Person.objects.count(),
+        "totalFaces": DetectedFace.objects.count(),
+    }
+
+    return JsonResponse(
+        {
+            "viewer": serialize_auth_user(request.user),
+            "summary": summary,
+            "host": {
+                "hostname": socket.gethostname(),
+                "platform": platform.platform(),
+                "python": sys.version.split()[0],
+                "timezone": str(timezone.get_current_timezone()),
+                "serverTime": timezone.now().isoformat(),
+            },
+            "runtime": {
+                "enabled": bool(ai_status_payload.get("enabled")),
+                "state": str(ai_status_payload.get("state", "")),
+                "summary": str(ai_status_payload.get("summary", "")),
+                "details": str(ai_status_payload.get("details", "")),
+                "reason": str(ai_status_payload.get("reason", "")),
+                "models": build_loaded_model_cards(ai_status_payload),
+            },
+            "users": user_payload,
+        }
+    )
+
+
+@require_POST
+def admin_user_access(request: HttpRequest, user_id: int) -> JsonResponse:
+    admin_error = require_admin_user(request)
+    if admin_error is not None:
+        return admin_error
+
+    payload = parse_json_body(request)
+    next_active = payload.get("active")
+    if not isinstance(next_active, bool):
+        return JsonResponse({"message": "Поле active должно быть булевым."}, status=400)
+
+    try:
+        target_user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"message": "Пользователь не найден."}, status=404)
+
+    if target_user.pk == request.user.pk and next_active is False:
+        return JsonResponse({"message": "Нельзя заблокировать собственный аккаунт."}, status=400)
+
+    if target_user.is_superuser and not request.user.is_superuser:
+        return JsonResponse({"message": "Только суперпользователь может менять статус другого администратора."}, status=403)
+
+    if target_user.is_active == next_active:
+        return JsonResponse(
+            {
+                "message": "Статус пользователя уже актуален.",
+                "user": {
+                    "id": target_user.id,
+                    "isActive": bool(target_user.is_active),
+                },
+            }
+        )
+
+    target_user.is_active = next_active
+    target_user.save(update_fields=["is_active"])
+
+    return JsonResponse(
+        {
+            "message": "Доступ пользователя обновлён." if next_active else "Пользователь заблокирован.",
+            "user": {
+                "id": target_user.id,
+                "isActive": bool(target_user.is_active),
+            },
+        }
+    )
+
+
+@require_GET
 def photo_list(request: HttpRequest) -> JsonResponse:
     auth_error = require_authenticated_user(request)
     if auth_error is not None:
         return auth_error
 
-    photos = [serialize_photo(photo) for photo in Photo.objects.filter(user=request.user)]
-    return JsonResponse({"photos": photos})
+    return JsonResponse({"photos": list_photos_for_user(request.user)})
 
 
 @require_GET
@@ -256,15 +489,7 @@ def people_list(request: HttpRequest) -> JsonResponse:
     if auth_error is not None:
         return auth_error
 
-    people = list_people_for_user(request.user)
-    message = ""
-    if not people:
-        if Photo.objects.filter(user=request.user).exists():
-            message = "Лица ещё не сгруппированы. Загрузите фото с лицами или выполните переиндексацию людей."
-        else:
-            message = "Загрузите фотографии, чтобы система могла найти и сгруппировать людей."
-
-    return JsonResponse({"people": people, "message": message})
+    return JsonResponse(list_people_payload_for_user(request.user))
 
 
 @require_GET
@@ -274,20 +499,31 @@ def person_photos(request: HttpRequest, person_id: int) -> JsonResponse:
         return auth_error
 
     try:
-        person = Person.objects.get(id=person_id, user=request.user)
-    except Person.DoesNotExist:
+        payload = get_person_photos_payload_for_user(request.user, person_id)
+    except LookupError:
         return JsonResponse({"message": "Человек не найден."}, status=404)
+    return JsonResponse(payload)
 
-    photos = list_person_photos(person)
-    return JsonResponse(
-        {
-            "person": {
-                "id": person.id,
-                "displayName": person.display_name,
-            },
-            "photos": photos,
-        }
-    )
+
+@require_GET
+def people_face_map(request: HttpRequest) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    return JsonResponse(list_face_map_for_user(request.user))
+
+
+@require_GET
+def people_face_analysis(request: HttpRequest, face_id: int) -> JsonResponse:
+    auth_error = require_authenticated_user(request)
+    if auth_error is not None:
+        return auth_error
+
+    payload = describe_face_for_user(request.user, face_id)
+    if payload is None:
+        return JsonResponse({"message": "Лицо не найдено."}, status=404)
+    return JsonResponse(payload)
 
 
 @require_POST
@@ -296,26 +532,14 @@ def person_rename(request: HttpRequest, person_id: int) -> JsonResponse:
     if auth_error is not None:
         return auth_error
 
-    try:
-        person = Person.objects.get(id=person_id, user=request.user)
-    except Person.DoesNotExist:
-        return JsonResponse({"message": "Человек не найден."}, status=404)
-
     payload = parse_json_body(request)
-    display_name = str(payload.get("displayName", "")).strip()
-    if len(display_name) > 120:
+    try:
+        response_payload = rename_person_for_user(request.user, person_id, str(payload.get("displayName", "")))
+    except LookupError:
+        return JsonResponse({"message": "Человек не найден."}, status=404)
+    except ValueError as exc:
         return JsonResponse({"message": "Имя человека должно быть не длиннее 120 символов."}, status=400)
-
-    person.display_name = display_name
-    person.save(update_fields=["display_name", "updated_at"])
-    return JsonResponse(
-        {
-            "person": {
-                "id": person.id,
-                "displayName": person.display_name,
-            }
-        }
-    )
+    return JsonResponse(response_payload)
 
 
 @require_POST
@@ -324,263 +548,18 @@ def photo_search(request: HttpRequest) -> JsonResponse:
     if auth_error is not None:
         return auth_error
 
-    payload = parse_json_body(request)
-    query = str(payload.get("query", "")).strip()
-    if not query:
-        return JsonResponse({"message": "Введите текстовый запрос для поиска."}, status=400)
-
-    matched_person, semantic_query = find_person_match(request.user, query)
-    logger.info("photo_search.request user=%s query=%r", request.user.get_username(), query)
-
     try:
-        engine_metadata = get_embedding_engine_metadata()
+        payload = parse_json_body(request)
+        response_payload = search_photos_for_user(request.user, str(payload.get("query", "")))
+    except ValueError as exc:
+        return JsonResponse({"message": str(exc)}, status=400)
     except Exception as exc:
-        logger.exception("photo_search.engine_unavailable user=%s query=%r", request.user.get_username(), query)
+        logger.exception("photo_search.failed user=%s", request.user.get_username())
         return JsonResponse(
             {"message": f"AI-модуль недоступен для поиска: {exc}"},
             status=503,
         )
-
-    expected_model_name = str(engine_metadata["model_name"])
-    expected_pretrained_tag = str(engine_metadata["pretrained_tag"])
-    expected_dimension = int(engine_metadata["embedding_dimension"])
-    rewrite_debug = {
-        "original_query": query,
-        "normalized_ru": query.strip(),
-        "normalized_en": "",
-        "search_prompt_en": "",
-        "used_rewriter": False,
-        "fallback_reason": "",
-    }
-    if semantic_query:
-        try:
-            rewrite_debug = rewrite_search_query(semantic_query)
-        except Exception:
-            try:
-                translated_query = translate_text_to_english(semantic_query)
-            except Exception:
-                translated_query = semantic_query.strip().lower()
-            rewrite_debug = {
-                "original_query": query,
-                "normalized_ru": semantic_query.strip(),
-                "normalized_en": translated_query,
-                "search_prompt_en": translated_query,
-                "used_rewriter": False,
-                "fallback_reason": "rewrite_search_query недоступен; использован обычный перевод.",
-            }
-
-    logger.info(
-        "photo_search.interpreted user=%s query=%r semantic_query=%r matched_person=%r normalized_ru=%r normalized_en=%r prompt=%r rewriter_used=%s fallback_reason=%r model=%s/%s dim=%s",
-        request.user.get_username(),
-        query,
-        semantic_query,
-        matched_person.display_name if matched_person else "",
-        str(rewrite_debug["normalized_ru"]),
-        str(rewrite_debug["normalized_en"]),
-        str(rewrite_debug["search_prompt_en"]),
-        bool(rewrite_debug["used_rewriter"]),
-        str(rewrite_debug["fallback_reason"]),
-        expected_model_name,
-        expected_pretrained_tag,
-        expected_dimension,
-    )
-
-    translated_query = str(rewrite_debug["normalized_en"])
-    search_prompt_en = str(rewrite_debug["search_prompt_en"])
-    english_query_tokens = extract_query_tokens(search_prompt_en)
-
-    indexed_photos_queryset = Photo.objects.filter(user=request.user, embedding_dimension__gt=0)
-    if matched_person is not None:
-        indexed_photos_queryset = indexed_photos_queryset.filter(detected_faces__person=matched_person).distinct()
-
-    indexed_photos = list(
-        indexed_photos_queryset
-        .only(
-            "id",
-            "image",
-            "original_filename",
-            "file_extension",
-            "mime_type",
-            "file_size_bytes",
-            "processing_status",
-            "created_at",
-            "embedding_model",
-            "embedding_pretrained_tag",
-            "embedding_dimension",
-            "embedding_vector",
-            "caption_en",
-            "caption_tokens",
-        )
-    )
-    if not indexed_photos:
-        logger.info(
-            "photo_search.no_indexed_photos user=%s query=%r matched_person=%r",
-            request.user.get_username(),
-            query,
-            matched_person.display_name if matched_person else "",
-        )
-        person_message = ""
-        if matched_person is not None:
-            person_message = f" Для человека «{matched_person.display_name}» пока нет проиндексированных фото."
-        return JsonResponse(
-            {
-                "query": query,
-                "semanticQuery": semantic_query,
-                "photos": [],
-                "totalIndexedPhotos": 0,
-                "matchedPerson": (
-                    {
-                        "id": matched_person.id,
-                        "displayName": matched_person.display_name,
-                    }
-                    if matched_person is not None
-                    else None
-                ),
-                "message": f"В вашей медиатеке пока нет проиндексированных фото для семантического поиска.{person_message}",
-            }
-        )
-
-    query_vector: list[float] | None = None
-    if search_prompt_en:
-        try:
-            text_embedding = create_text_embedding(search_prompt_en)
-        except ValueError as exc:
-            logger.warning(
-                "photo_search.invalid_query user=%s query=%r prompt=%r",
-                request.user.get_username(),
-                query,
-                search_prompt_en,
-            )
-            return JsonResponse({"message": str(exc)}, status=400)
-        except Exception as exc:
-            logger.exception(
-                "photo_search.embedding_failed user=%s query=%r prompt=%r",
-                request.user.get_username(),
-                query,
-                search_prompt_en,
-            )
-            return JsonResponse(
-                {"message": f"Не удалось построить embedding для текстового запроса: {exc}"},
-                status=500,
-            )
-
-        query_vector = list(text_embedding["vector"])
-    search_hits: list[tuple[float, Photo, dict[str, float | str]]] = []
-    skipped_photos = 0
-
-    for photo in indexed_photos:
-        if photo.embedding_model != expected_model_name:
-            skipped_photos += 1
-            continue
-        if photo.embedding_pretrained_tag != expected_pretrained_tag:
-            skipped_photos += 1
-            continue
-        if photo.embedding_dimension != expected_dimension:
-            skipped_photos += 1
-            continue
-        if not is_valid_embedding_vector(photo.embedding_vector, expected_dimension):
-            skipped_photos += 1
-            continue
-
-        similarity = dot_product(query_vector, photo.embedding_vector) if query_vector is not None else 0.0
-        caption_match_ratio, token_bonus = score_caption_match(english_query_tokens, photo.caption_tokens)
-        hybrid_score = (
-            (similarity * EMBEDDING_SCORE_WEIGHT)
-            + (caption_match_ratio * CAPTION_SCORE_WEIGHT)
-            + (token_bonus * TOKEN_BONUS_WEIGHT)
-        ) if query_vector is not None else 1.0
-        debug_meta = {
-            "embeddingScore": round(similarity, 6),
-            "captionScore": round(caption_match_ratio, 6),
-            "tokenBonus": round(token_bonus, 6),
-            "translatedQuery": translated_query,
-            "normalizedRu": str(rewrite_debug["normalized_ru"]),
-            "searchPromptEn": search_prompt_en,
-            "queryRewriterUsed": bool(rewrite_debug["used_rewriter"]),
-            "queryRewriteFallbackReason": str(rewrite_debug["fallback_reason"]),
-            "matchedPersonName": matched_person.display_name if matched_person else "",
-        }
-        search_hits.append((hybrid_score, photo, debug_meta))
-
-    if not search_hits:
-        logger.info(
-            "photo_search.no_valid_hits user=%s query=%r prompt=%r indexed=%s skipped=%s",
-            request.user.get_username(),
-            query,
-            search_prompt_en,
-            len(indexed_photos),
-            skipped_photos,
-        )
-        return JsonResponse(
-            {
-                "query": query,
-                "semanticQuery": semantic_query,
-                "photos": [],
-                "totalIndexedPhotos": len(indexed_photos),
-                "skippedPhotos": skipped_photos,
-                "matchedPerson": (
-                    {
-                        "id": matched_person.id,
-                        "displayName": matched_person.display_name,
-                    }
-                    if matched_person is not None
-                    else None
-                ),
-                "message": "Не найдено ни одного фото с валидным embedding-индексом для текущей AI-модели.",
-            }
-        )
-
-    search_hits.sort(key=lambda item: item[0], reverse=True)
-    top_hits = search_hits[:SEARCH_RESULTS_LIMIT]
-    returned_photos = [
-        {
-            "photo_id": photo.id,
-            "filename": photo.original_filename,
-            "score": round(score, 6),
-            "embedding_score": debug_meta["embeddingScore"],
-            "caption_score": debug_meta["captionScore"],
-            "token_bonus": debug_meta["tokenBonus"],
-        }
-        for score, photo, debug_meta in top_hits
-    ]
-
-    logger.info(
-        "photo_search.response user=%s query=%r prompt=%r indexed=%s skipped=%s returned=%s",
-        request.user.get_username(),
-        query,
-        search_prompt_en,
-        len(indexed_photos),
-        skipped_photos,
-        returned_photos,
-    )
-
-    return JsonResponse(
-        {
-            "query": query,
-            "semanticQuery": semantic_query,
-            "translatedQuery": translated_query,
-            "normalizedRu": str(rewrite_debug["normalized_ru"]),
-            "searchPromptEn": search_prompt_en,
-            "queryRewriterUsed": bool(rewrite_debug["used_rewriter"]),
-            "queryRewriteFallbackReason": str(rewrite_debug["fallback_reason"]),
-            "matchedPerson": (
-                {
-                    "id": matched_person.id,
-                    "displayName": matched_person.display_name,
-                }
-                if matched_person is not None
-                else None
-            ),
-            "photos": [
-                {**serialize_search_hit(photo, score), **debug_meta}
-                for score, photo, debug_meta in top_hits
-            ],
-            "topK": SEARCH_RESULTS_LIMIT,
-            "totalIndexedPhotos": len(indexed_photos),
-            "skippedPhotos": skipped_photos,
-            "message": "" if top_hits else "Совпадений не найдено.",
-        }
-    )
+    return JsonResponse(response_payload)
 
 
 @require_POST
@@ -589,88 +568,16 @@ def photo_upload(request: HttpRequest) -> JsonResponse:
     if auth_error is not None:
         return auth_error
 
-    uploaded_files = request.FILES.getlist("files")
-    if not uploaded_files:
-        return JsonResponse({"message": "Не выбраны файлы для загрузки."}, status=400)
-
-    invalid_files = [
-        uploaded_file.name
-        for uploaded_file in uploaded_files
-        if Path(uploaded_file.name).suffix.lower() not in ALLOWED_PHOTO_EXTENSIONS
-    ]
-    if invalid_files:
-        return JsonResponse(
-            {
-                "message": "Можно загружать только изображения поддерживаемых форматов.",
-                "invalidFiles": invalid_files,
-            },
-            status=400,
-        )
-
-    indexed_uploads: list[tuple] = []
     try:
-        for uploaded_file in uploaded_files:
-            uploaded_file.seek(0)
-            photo_index = create_photo_index(uploaded_file)
-            uploaded_file.seek(0)
-            indexed_uploads.append((uploaded_file, photo_index))
+        response_payload = upload_photo_files_for_user(request.user, request.FILES.getlist("files"))
+    except ValueError as exc:
+        return JsonResponse({"message": str(exc)}, status=400)
     except Exception as exc:
         return JsonResponse(
             {"message": f"Не удалось построить AI-индекс для загружаемых фото: {exc}"},
             status=500,
         )
-
-    created_photos: list[Photo] = []
-    face_index_warning = ""
-    for uploaded_file, photo_index in indexed_uploads:
-        embedding_result = photo_index["embedding"]
-        with transaction.atomic():
-            photo = Photo(
-                user=request.user,
-                original_filename=uploaded_file.name,
-                file_extension=Path(uploaded_file.name).suffix.lower(),
-                mime_type=getattr(uploaded_file, "content_type", "") or "",
-                file_size_bytes=uploaded_file.size,
-                processing_status="indexed",
-                embedding_model=str(embedding_result["model_name"]),
-                embedding_pretrained_tag=str(embedding_result["pretrained_tag"]),
-                embedding_dimension=int(embedding_result["dimension"]),
-                embedding_vector=list(embedding_result["vector"]),
-                embedding_created_at=timezone.now(),
-                caption_model=str(photo_index["caption_model_name"]),
-                caption_en=str(photo_index["caption_en"]),
-                caption_tokens=list(photo_index["caption_tokens"]),
-                caption_created_at=timezone.now(),
-            )
-            photo.image.save(uploaded_file.name, uploaded_file, save=False)
-            photo.save()
-
-        created_photos.append(photo)
-        try:
-            uploaded_file.seek(0)
-            index_photo_faces(photo, uploaded_file)
-        except Exception as exc:
-            if not face_index_warning:
-                face_index_warning = f"Группировка лиц временно недоступна: {exc}"
-
-    cluster_error = ""
-    try:
-        cluster_user_faces(request.user)
-    except Exception as exc:
-        cluster_error = f"Не удалось обновить группы людей: {exc}"
-
-    response_message = f"Загружено {len(created_photos)} фото."
-    if face_index_warning:
-        response_message = f"{response_message} {face_index_warning}"
-    elif cluster_error:
-        response_message = f"{response_message} {cluster_error}"
-    return JsonResponse(
-        {
-            "message": response_message,
-            "photos": [serialize_photo(photo) for photo in created_photos],
-        },
-        status=201,
-    )
+    return JsonResponse(response_payload, status=201)
 
 
 @require_POST
@@ -680,15 +587,7 @@ def photo_delete(request: HttpRequest, photo_id: int) -> JsonResponse:
         return auth_error
 
     try:
-        photo = Photo.objects.get(id=photo_id, user=request.user)
-    except Photo.DoesNotExist:
+        response_payload = delete_photo_for_user(request.user, photo_id)
+    except LookupError:
         return JsonResponse({"message": "Фотография не найдена."}, status=404)
-
-    clear_photo_faces(photo)
-    photo.image.delete(save=False)
-    photo.delete()
-    try:
-        cluster_user_faces(request.user)
-    except Exception:
-        pass
-    return JsonResponse({"message": "Фотография удалена.", "photoId": photo_id})
+    return JsonResponse(response_payload)
